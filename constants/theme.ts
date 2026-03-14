@@ -3,7 +3,6 @@
  * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
  */
 
-import { Platform } from 'react-native';
 
 const tintColorLight = '#0a7ea4';
 const tintColorDark = '#fff';
@@ -27,27 +26,48 @@ export const Colors = {
   },
 };
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  },
-});
+/**
+ * Finance app theme colors — 60-30-10 rule
+ * 60%: background (Deep Navy)
+ * 30%: card / surfaces (Slate)
+ * 10%: primary accent (Sky Blue)
+ */
+export const FinanceTheme = {
+  // Core palette
+  background: '#0F172A',
+  backgroundLight: '#162036',
+  card: '#1E293B',
+  cardBorder: '#334155',
+
+  // Accent
+  primary: '#38BDF8',
+  primaryDark: '#0EA5E9',
+
+  // Semantic
+  profit: '#10B981',
+  loss: '#EF4444',
+
+  // Text
+  text: '#F8FAFC',
+  textSecondary: '#94A3B8',
+  textMuted: '#64748B',
+
+  // Inputs
+  inputBg: '#1E293B',
+  inputBorder: '#334155',
+  inputBorderFocus: '#38BDF8',
+  inputPlaceholder: '#64748B',
+
+  // Social buttons
+  googleBg: '#FFFFFF',
+  googleText: '#1F2937',
+  appleBg: '#000000',
+  appleText: '#FFFFFF',
+};
+
+export const Fonts = {
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semiBold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+};
