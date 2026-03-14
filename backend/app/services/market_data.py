@@ -1,0 +1,233 @@
+import logging
+import pandas as pd
+from typing import Dict, List, Any, Optional
+from datetime import datetime
+import borsapy as bp
+
+logger = logging.getLogger(__name__)
+
+class MarketDataService:
+    def __init__(self):
+        # Major indices for reference
+        self.indices_symbols = ["XU100", "XU030"]
+        # Common period mapping for OHLCV
+        self.period_config = {
+            "1G": {"period": "1d", "interval": "15m"},
+            "1H": {"period": "7d", "interval": "1h"},
+            "1A": {"period": "1mo", "interval": "1h", "resample": "4h"},
+            "3A": {"period": "3mo", "interval": "1d"},
+            "1Y": {"period": "1y", "interval": "1wk"}
+        }
+
+    def get_indices(self) -> List[Dict[str, Any]]:
+        """
+        BIST100, BIST30 canlı endeks verisi.
+        """
+        results = []
+        for sym in self.indices_symbols:
+            try:
+                ticker = bp.Ticker(sym)
+                info = ticker.info
+                # info is typically a dict from yfinance-like structure
+                results.append({
+                    "index_name": sym,
+                    "value": info.get("regularMarketPrice", 0.0),
+                    "change_percentage": info.get("regularMarketChangePercent", 0.0)
+                })
+            except Exception as e:
+                logger.error(f"Error fetching index {sym}: {e}")
+                results.append({"index_name": sym, "value": 0.0, "change_percentage": 0.0})
+        return results
+
+    def get_market_overview(self, stock_list: List[str] = None) -> Dict[str, Any]:
+        """
+        Verilen stock listesi üzerinden (varsayılan BIST30 ana kağıtları) 
+        yükselenler, düşenler ve hacimlileri filtreleyip döner.
+        """
+        if not stock_list:
+            # Örnek BIST30 ana hisseleri
+            stock_list = ["THYAO", "ASELS", "TUPRS", "SASA", "HEKTS", 
+                          "GARAN", "AKBNK", "YKBNK", "EREGL", "KCHOL",
+                          "SISE", "BIMAS", "ISCTR", "PGSUS", "TCELL"]
+        
+        all_data = []
+        for sym in stock_list:
+            try:
+                ticker = bp.Ticker(sym)
+                info = ticker.info
+                # info field names used as confirmed by dir() search
+                price = info.get("regularMarketPrice") or info.get("last") or 0.0
+                change_pct = info.get("regularMarketChangePercent") or info.get("change_percent") or 0.0
+                volume = info.get("regularMarketVolume") or info.get("volume") or 0.0
+                
+                all_data.append({
+                    "symbol": sym,
+                    "price": float(price),
+                    "change_percentage": float(change_pct),
+                    "volume": float(volume)
+                })
+            except Exception as e:
+                logger.error(f"Error fetching market overview for {sym}: {e}")
+
+        # Filtreleme
+        top_gainers = sorted(all_data, key=lambda x: x["change_percentage"], reverse=True)[:5]
+        top_losers = sorted(all_data, key=lambda x: x["change_percentage"])[:5]
+        high_volume = sorted(all_data, key=lambda x: x["volume"], reverse=True)[:5]
+
+        return {
+            "top_gainers": top_gainers,
+            "top_losers": top_losers,
+            "high_volume": high_volume,
+            "indices": self.get_indices()
+        }
+
+    def get_all_stocks(self) -> List[Dict[str, Any]]:
+        """
+        Tüm BIST hisselerini döner.
+        """
+        try:
+            df = bp.companies()
+            if df.empty:
+                return []
+            return df.to_dict(orient="records")
+        except Exception as e:
+            logger.error(f"Error fetching all stocks: {e}")
+            return []
+
+    def search_stocks(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Hisse arama.
+        """
+        try:
+            df = bp.search_companies(query)
+            if df.empty:
+                return []
+            return df.to_dict(orient="records")
+        except Exception as e:
+            logger.error(f"Error searching stocks for {query}: {e}")
+            return []
+
+    def get_ohlcv(self, symbol: str, period: str = "1G") -> Dict[str, Any]:
+        """
+        Hisse sembolüne göre OHLCV zaman serisi verisi.
+        """
+        try:
+            config = self.period_config.get(period, self.period_config["1G"])
+            ticker = bp.Ticker(symbol)
+            df = ticker.history(period=config["period"], interval=config["interval"])
+            
+            if df.empty:
+                return {"symbol": symbol, "period": period, "interval": config["interval"], "period_change_percent": 0.0, "data": []}
+            
+            # Resampling logic (e.g. for 4h)
+            if "resample" in config:
+                df = df.resample(config["resample"]).agg({
+                    'Open': 'first',
+                    'High': 'max',
+                    'Low': 'min',
+                    'Close': 'last',
+                    'Volume': 'sum'
+                }).dropna()
+
+            # Calculate period percentage change
+            first_price = df['Open'].iloc[0]
+            last_price = df['Close'].iloc[-1]
+            period_change = ((last_price - first_price) / first_price * 100) if first_price != 0 else 0.0
+
+            df = df.reset_index()
+            results = []
+            for _, row in df.iterrows():
+                date_val = row.get('Date') or row.get('index')
+                date_str = date_val.isoformat() if hasattr(date_val, 'isoformat') else str(date_val)
+                results.append({
+                    "date": date_str,
+                    "open": float(row.get('Open', row.get('open', 0.0))),
+                    "high": float(row.get('High', row.get('high', 0.0))),
+                    "low": float(row.get('Low', row.get('low', 0.0))),
+                    "close": float(row.get('Close', row.get('close', 0.0))),
+                    "volume": float(row.get('Volume', row.get('volume', 0.0)))
+                })
+            
+            return {
+                "symbol": symbol,
+                "period": period,
+                "interval": config.get("resample") or config["interval"],
+                "period_change_percent": round(period_change, 2),
+                "data": results
+            }
+        except Exception as e:
+            logger.error(f"Error fetching OHLCV for {symbol}: {e}")
+            return {"symbol": symbol, "period": period, "interval": "N/A", "period_change_percent": 0.0, "data": []}
+
+    def get_company_profile(self, symbol: str) -> Dict[str, Any]:
+        """
+        Şirket profili ve çok daha kapsamlı rasyolar (tüm ticker.info verileri).
+        """
+        try:
+            ticker = bp.Ticker(symbol)
+            info = ticker.info
+            
+            # Detailed metrics from info
+            metrics = {
+                "symbol": symbol,
+                "price": info.get("regularMarketPrice") or info.get("last"),
+                "change_percent": info.get("regularMarketChangePercent") or info.get("change_percent"),
+                "market_cap": info.get("marketCap"),
+                "pe_ratio": info.get("trailingPE") or info.get("forwardPE"),
+                "pb_ratio": info.get("priceToBook"),
+                "eps": info.get("trailingEps"),
+                "enterprise_to_ebitda": info.get("enterpriseToEbitda"),
+                "net_debt": info.get("netDebt"),
+                "float_shares": info.get("floatShares"),
+                "foreign_ratio": info.get("foreignRatio"),
+                "dividend_yield": info.get("dividendYield"),
+                "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
+                "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
+                "fifty_day_average": info.get("fiftyDayAverage"),
+                "two_hundred_day_average": info.get("twoHundredDayAverage"),
+                "beta": info.get("beta")
+            }
+            
+            profile = {
+                "symbol": symbol,
+                "name": info.get("longName") or info.get("name"),
+                "sector": info.get("sector"),
+                "industry": info.get("industry"),
+                "website": info.get("website"),
+                "description": info.get("longBusinessSummary"),
+                "metrics": metrics,
+                "dividends": self.get_dividends(symbol)
+            }
+            return profile
+        except Exception as e:
+            logger.error(f"Error fetching company profile for {symbol}: {e}")
+            # Fallback if specific symbol info fails
+            return {"symbol": symbol, "dividends": []}
+
+    def get_dividends(self, symbol: str) -> List[Dict[str, Any]]:
+        """
+        Şirket temettü geçmişini döner.
+        """
+        try:
+            ticker = bp.Ticker(symbol)
+            divs = ticker.dividends
+            
+            if divs is None or (isinstance(divs, pd.Series) and divs.empty):
+                return []
+            
+            results = []
+            if isinstance(divs, pd.Series):
+                divs = divs.reset_index()
+                for _, row in divs.iterrows():
+                    date_val = row.get('Date') or row.get('index')
+                    date_str = date_val.isoformat() if hasattr(date_val, 'isoformat') else str(date_val)
+                    results.append({
+                        "date": date_str,
+                        "dividend": float(row[0] if 0 in row else row.get('Dividends', 0.0))
+                    })
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching dividends for {symbol}: {e}")
+            return []
+
+market_service = MarketDataService()
