@@ -159,6 +159,72 @@ class MarketDataService:
             logger.error(f"Error fetching OHLCV for {symbol}: {e}")
             return {"symbol": symbol, "period": period, "interval": "N/A", "period_change_percent": 0.0, "data": []}
 
+    def get_news(self, symbol: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Şirket bazlı KAP haberlerini döner.
+        """
+        try:
+            ticker = bp.Ticker(symbol)
+            df = ticker.news
+            if df.empty:
+                return []
+            
+            # Limited to last N news
+            df = df.head(limit)
+            
+            # Map capitalized keys (Date, Title, URL) to lowercase (date, title, url)
+            results = []
+            for _, row in df.iterrows():
+                results.append({
+                    "date": str(row.get("Date", "")),
+                    "title": str(row.get("Title", "")),
+                    "url": str(row.get("URL", ""))
+                })
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching news for {symbol}: {e}")
+            return []
+
+    def get_news_content(self, disclosure_id: str) -> Optional[str]:
+        """
+        KAP bildirim içeriğini HTML olarak döner.
+        """
+        try:
+            # We can use a dummy ticker or if Ticker requires symbol:
+            ticker = bp.Ticker("THYAO") 
+            return ticker.get_news_content(disclosure_id)
+        except Exception as e:
+            logger.error(f"Error fetching news content for {disclosure_id}: {e}")
+            return None
+
+    def get_economic_calendar(self, period: str = "1w") -> List[Dict[str, Any]]:
+        """
+        Ekonomi takvimini döner (TR ve US ağırlıklı).
+        """
+        try:
+            cal = bp.EconomicCalendar()
+            df = cal.events(period=period, country=["TR", "US"])
+            if df.empty:
+                return []
+            
+            # Format dataframe results to dict
+            results = []
+            for _, row in df.iterrows():
+                results.append({
+                    "date": str(row.get("Date")),
+                    "time": str(row.get("Time")),
+                    "country": str(row.get("Country")),
+                    "importance": str(row.get("Importance")),
+                    "event": str(row.get("Event")),
+                    "actual": str(row.get("Actual")) if pd.notna(row.get("Actual")) else None,
+                    "forecast": str(row.get("Forecast")) if pd.notna(row.get("Forecast")) else None,
+                    "previous": str(row.get("Previous")) if pd.notna(row.get("Previous")) else None,
+                })
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching economic calendar: {e}")
+            return []
+
     def get_company_profile(self, symbol: str) -> Dict[str, Any]:
         """
         Şirket profili ve çok daha kapsamlı rasyolar (tüm ticker.info verileri).

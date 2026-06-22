@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Query
 from typing import List, Optional
-from app.schemas.market import StockData, OHLCVData, CompanyProfile, CompanyShort, OHLCVResponse
+from app.schemas.market import (
+    StockData, OHLCVData, CompanyProfile, CompanyShort, 
+    OHLCVResponse, NewsData, CalendarEvent
+)
 from app.services.seeder import market_cache
 from app.services.market_data import market_service
 
@@ -57,3 +60,25 @@ async def get_company_profile(symbol: str):
     Şirket profili, tüm detaylı metrikler ve temettü geçmişi verilerini döner.
     """
     return market_service.get_company_profile(symbol)
+
+@router.get("/news/{symbol}", response_model=List[NewsData])
+async def get_news(symbol: str, limit: int = Query(10, ge=1, le=100)):
+    """
+    Belirli bir hisseye ait güncel KAP haberlerini döner.
+    """
+    return market_service.get_news(symbol, limit)
+
+@router.get("/news/content/{disclosure_id}")
+async def get_news_content(disclosure_id: str):
+    """
+    KAP bildiriminin detaylı HTML içeriğini döner.
+    """
+    content = market_service.get_news_content(disclosure_id)
+    return {"content": content}
+
+@router.get("/economic-calendar", response_model=List[CalendarEvent])
+async def get_economic_calendar(period: str = Query("1w", description="1d, 1w, 2w, 1mo")):
+    """
+    Türkiye ve ABD başta olmak üzere önemli ekonomik gelişmeleri ve takvimi döner.
+    """
+    return market_service.get_economic_calendar(period)

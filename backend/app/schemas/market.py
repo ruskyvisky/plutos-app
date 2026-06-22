@@ -66,6 +66,21 @@ class CompanyProfile(BaseModel):
     metrics: Optional[FundamentalMetrics] = None
     dividends: List[DividendData] = []
 
+class NewsData(BaseModel):
+    date: str
+    title: str
+    url: str
+
+class CalendarEvent(BaseModel):
+    date: str
+    time: Optional[str] = None
+    country: str
+    importance: str
+    event: str
+    actual: Optional[str] = None
+    forecast: Optional[str] = None
+    previous: Optional[str] = None
+
 class MarketOverviewResponse(BaseModel):
     top_gainers: List[StockData]
     top_losers: List[StockData]
