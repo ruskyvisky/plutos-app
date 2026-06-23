@@ -1,5 +1,6 @@
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import { FinanceTheme, Fonts } from '@/constants/theme';
+import { loginApi } from '@/services/authService';
 import { Ionicons } from '@expo/vector-icons';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +9,7 @@ import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
     ActivityIndicator,
+    Alert,
     Dimensions,
     Image,
     KeyboardAvoidingView,
@@ -45,7 +47,6 @@ function AppLogo() {
     return (
         <View style={styles.logoContainer}>
             <View style={styles.logoIconWrapper}>
-                {/* Sadece senin bildiğin gizli beyaz kutu */}
                 <View style={styles.secretWhiteBox} />
                 <Image
                     source={require('@/assets/images/logo.png')}
@@ -92,6 +93,7 @@ export default function LoginScreen() {
     const router = useRouter();
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [apiError, setApiError] = useState<string | null>(null);
 
     const {
         control,
@@ -107,20 +109,16 @@ export default function LoginScreen() {
 
     const onSubmit = async (data: LoginFormData) => {
         setIsLoading(true);
+        setApiError(null);
         try {
-            // TODO: Gerçek auth API çağrısı burada yapılacak
-            console.log('Login attempt:', data.email);
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+            await loginApi({ email: data.email, password: data.password });
             router.replace('/(tabs)/index');
-        } catch (error) {
-            console.error('Login failed:', error);
+        } catch (error: any) {
+            const msg = error?.message ?? 'Giriş sırasında bir hata oluştu.';
+            setApiError(msg);
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const handleGuestMode = () => {
-        router.replace('/(tabs)/index');
     };
 
     return (
@@ -229,6 +227,14 @@ export default function LoginScreen() {
                             )}
                         </View>
 
+                        {/* API Error */}
+                        {apiError && (
+                            <View style={styles.apiErrorBox}>
+                                <Ionicons name="alert-circle-outline" size={16} color={FinanceTheme.loss} />
+                                <Text style={styles.apiErrorText}>{apiError}</Text>
+                            </View>
+                        )}
+
                         {/* Forgot Password */}
                         <TouchableOpacity style={styles.forgotPasswordButton} activeOpacity={0.7}>
                             <Text style={styles.forgotPasswordText}>Şifremi Unuttum</Text>
@@ -283,25 +289,15 @@ export default function LoginScreen() {
                         />
                     </View>
 
-                    {/* Bottom Links */}
+                    {/* Bottom Links — Sadece Kayıt Ol */}
                     <View style={styles.bottomLinks}>
-                        <TouchableOpacity style={styles.registerRow} activeOpacity={0.7}>
+                        <TouchableOpacity
+                            style={styles.registerRow}
+                            activeOpacity={0.7}
+                            onPress={() => router.push('/register')}
+                        >
                             <Text style={styles.registerText}>Henüz hesabın yok mu? </Text>
                             <Text style={styles.registerHighlight}>Kayıt Ol</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.guestButton}
-                            onPress={handleGuestMode}
-                            activeOpacity={0.7}
-                        >
-                            <Ionicons
-                                name="glasses-outline"
-                                size={18}
-                                color={FinanceTheme.textSecondary}
-                                style={{ marginRight: 6 }}
-                            />
-                            <Text style={styles.guestText}>Misafir olarak devam et</Text>
                         </TouchableOpacity>
                     </View>
                 </ScrollView>
@@ -420,6 +416,25 @@ const styles = StyleSheet.create({
         fontFamily: Fonts.regular,
     },
 
+    // API Error Box
+    apiErrorBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: 'rgba(239, 68, 68, 0.25)',
+        padding: 10,
+        marginBottom: 12,
+        gap: 8,
+    },
+    apiErrorText: {
+        color: FinanceTheme.loss,
+        fontSize: 13,
+        fontFamily: Fonts.regular,
+        flex: 1,
+    },
+
     // Forgot password
     forgotPasswordButton: {
         alignSelf: 'flex-end',
@@ -508,19 +523,5 @@ const styles = StyleSheet.create({
         color: FinanceTheme.primary,
         fontSize: 14,
         fontFamily: Fonts.bold,
-    },
-    guestButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 24,
-        borderWidth: 1,
-        borderColor: FinanceTheme.cardBorder,
-    },
-    guestText: {
-        color: FinanceTheme.textSecondary,
-        fontSize: 13,
-        fontFamily: Fonts.medium,
     },
 });

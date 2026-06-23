@@ -18,8 +18,22 @@ export type { NewsItem, PortfolioData, Holding } from './mockData';
 const BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1';
 
-async function apiFetch<T>(path: string): Promise<T> {
-  const response = await fetch(`${BASE_URL}${path}`);
+import { getToken } from './authService';
+
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = await getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string>),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers,
+  });
   if (!response.ok) {
     throw new Error(`API error ${response.status}: ${path}`);
   }
