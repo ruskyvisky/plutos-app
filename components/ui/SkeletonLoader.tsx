@@ -105,6 +105,35 @@ export function SkeletonRow() {
   );
 }
 
+export function SkeletonStockDetail() {
+  return (
+    <View style={skeletonStyles.detailContainer}>
+      {/* Price area */}
+      <View style={skeletonStyles.detailPriceArea}>
+        <Skeleton width={160} height={40} borderRadius={8} />
+        <Skeleton width={120} height={24} borderRadius={12} style={{ marginTop: 10 }} />
+      </View>
+      {/* Timeframe bar */}
+      <View style={skeletonStyles.detailTimeRow}>
+        {[1,2,3,4].map(i => <Skeleton key={i} width={54} height={32} borderRadius={16} />)}
+      </View>
+      {/* Period badge */}
+      <View style={{ alignItems: 'center', marginBottom: 12 }}>
+        <Skeleton width={130} height={30} borderRadius={15} />
+      </View>
+      {/* Chart */}
+      <Skeleton width="100%" height={200} borderRadius={12} style={{ marginBottom: 16 }} />
+      {/* Day info card */}
+      <Skeleton width="100%" height={70} borderRadius={12} style={{ marginBottom: 16 }} />
+      {/* Metrics grid */}
+      <View style={skeletonStyles.detailMetricGrid}>
+        {[1,2,3,4,5,6].map(i => <Skeleton key={i} width="47%" height={72} borderRadius={10} />)}
+      </View>
+    </View>
+  );
+}
+
+
 const skeletonStyles = StyleSheet.create({
   textContainer: {
     gap: 4,
@@ -144,5 +173,25 @@ const skeletonStyles = StyleSheet.create({
   },
   rowRight: {
     alignItems: 'flex-end',
+  },
+  detailContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  detailPriceArea: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 0,
+  },
+  detailTimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  detailMetricGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
 });

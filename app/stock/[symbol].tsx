@@ -1,278 +1,799 @@
-import React, { useCallback, useEffect, useState } from 'react';
+/**
+ * Plutos — Hisse Detay Sayfası
+ * Mum grafiği, metrik kartlar, haberler, favori özelliği
+ */
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
+  Linking,
+  Modal,
+  PanResponder,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import Svg, { Polyline } from 'react-native-svg';
+import Svg, {
+  Defs,
+  Line,
+  LinearGradient,
+  Path,
+  Rect,
+  Stop,
+  Text as SvgText,
+  Circle,
+} from 'react-native-svg';
 
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { DataSourceFooter } from '@/components/ui/DataSourceFooter';
-import { SkeletonCard } from '@/components/ui/SkeletonLoader';
-import { H1, H2, H3, Body, Caption, Typography } from '@/components/ui/Typography';
+import { SkeletonStockDetail } from '@/components/ui/SkeletonLoader';
+import { H1, H3, Body, Caption, Typography } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Radii, Spacing } from '@/constants/theme';
-import { fetchChartData, fetchStockDetail } from '@/services/api';
-import type { Stock } from '@/services/api';
+import {
+  fetchStockDetail,
+  fetchOHLCVWithChange,
+  fetchStockNews,
+} from '@/services/api';
+import type { Stock, OHLCVWithChange, CandleData, StockNewsItem } from '@/services/api';
 import { formatCurrency, formatLargeNumber, formatPercent } from '@/services/mockData';
+import { isFavorite, toggleFavorite } from '@/services/favorites';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - 40;
-const CHART_HEIGHT = 200;
+const H_PADDING = 20;
+const CHART_W = SCREEN_WIDTH - H_PADDING * 2;
+const CHART_H = 220;
+const CHART_PT = { top: 20, bottom: 28, left: 4, right: 4 };
 
 type Timeframe = '1G' | '1H' | '1A' | '1Y';
-const TIMEFRAMES: Timeframe[] = ['1G', '1H', '1A', '1Y'];
+const TIMEFRAMES: { key: Timeframe; label: string }[] = [
+  { key: '1G', label: '1G' },
+  { key: '1H', label: '1H' },
+  { key: '1A', label: '1A' },
+  { key: '1Y', label: '1Y' },
+];
 
+// ─── Candlestick Chart ────────────────────────────────────────
+function CandlestickChart({
+  candles,
+  chartColor,
+  periodChangePercent,
+}: {
+  candles: CandleData[];
+  chartColor: string;
+  periodChangePercent: number;
+}) {
+  const [tooltipIdx, setTooltipIdx] = useState<number | null>(null);
+
+  const innerW = CHART_W - CHART_PT.left - CHART_PT.right;
+  const innerH = CHART_H - CHART_PT.top - CHART_PT.bottom;
+
+  if (candles.length === 0) {
+    return (
+      <View style={[chartStyles.empty, { height: CHART_H }]}>
+        <Ionicons name="bar-chart-outline" size={32} color={FinanceTheme.textMuted} />
+        <Caption style={{ marginTop: 8 }}>Grafik verisi bulunamadı</Caption>
+      </View>
+    );
+  }
+
+  const allValues = candles.flatMap((c) => [c.high, c.low]);
+  const minPrice = Math.min(...allValues);
+  const maxPrice = Math.max(...allValues);
+  const priceRange = maxPrice - minPrice || 1;
+
+  const toY = (price: number) =>
+    CHART_PT.top + innerH - ((price - minPrice) / priceRange) * innerH;
+
+  // Max 60 mum göster — daha fazlaysa downsample
+  const MAX_CANDLES = 60;
+  const displayCandles =
+    candles.length > MAX_CANDLES
+      ? candles.filter((_, i) => i % Math.ceil(candles.length / MAX_CANDLES) === 0)
+      : candles;
+
+  const candleW = Math.max(2, Math.min(12, innerW / displayCandles.length - 2));
+  const step = innerW / displayCandles.length;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e) => {
+        const idx = Math.floor(
+          ((e.nativeEvent.locationX - CHART_PT.left) / innerW) * displayCandles.length
+        );
+        setTooltipIdx(Math.max(0, Math.min(idx, displayCandles.length - 1)));
+      },
+      onPanResponderMove: (e) => {
+        const idx = Math.floor(
+          ((e.nativeEvent.locationX - CHART_PT.left) / innerW) * displayCandles.length
+        );
+        setTooltipIdx(Math.max(0, Math.min(idx, displayCandles.length - 1)));
+      },
+      onPanResponderRelease: () => setTooltipIdx(null),
+      onPanResponderTerminate: () => setTooltipIdx(null),
+    })
+  ).current;
+
+  const tooltipCandle = tooltipIdx !== null ? displayCandles[tooltipIdx] : null;
+  const tooltipX =
+    tooltipIdx !== null
+      ? CHART_PT.left + tooltipIdx * step + step / 2
+      : 0;
+
+  // Background area path (smooth line for context)
+  const closes = displayCandles.map((c) => c.close);
+  let areaPath = '';
+  if (closes.length > 1) {
+    const pts = closes.map((v, i) => ({
+      x: CHART_PT.left + i * step + step / 2,
+      y: toY(v),
+    }));
+    let p = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) {
+      const cp = (pts[i - 1].x + pts[i].x) / 2;
+      p += ` C ${cp} ${pts[i - 1].y} ${cp} ${pts[i].y} ${pts[i].x} ${pts[i].y}`;
+    }
+    const bottom = CHART_PT.top + innerH + CHART_PT.bottom;
+    areaPath = p + ` L ${pts[pts.length - 1].x} ${bottom} L ${pts[0].x} ${bottom} Z`;
+  }
+
+  const isUp = periodChangePercent >= 0;
+
+  return (
+    <View style={{ width: CHART_W, height: CHART_H }} {...panResponder.panHandlers}>
+      <Svg width={CHART_W} height={CHART_H}>
+        <Defs>
+          <LinearGradient id="cgGreen" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={FinanceTheme.profit} stopOpacity="0.12" />
+            <Stop offset="1" stopColor={FinanceTheme.profit} stopOpacity="0" />
+          </LinearGradient>
+          <LinearGradient id="cgRed" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={FinanceTheme.loss} stopOpacity="0.12" />
+            <Stop offset="1" stopColor={FinanceTheme.loss} stopOpacity="0" />
+          </LinearGradient>
+        </Defs>
+
+        {/* Subtle area bg */}
+        {areaPath ? <Path d={areaPath} fill={`url(#${isUp ? 'cgGreen' : 'cgRed'})`} /> : null}
+
+        {/* Horizontal grid lines */}
+        {[0.25, 0.5, 0.75].map((r) => {
+          const y = CHART_PT.top + innerH * r;
+          const price = maxPrice - priceRange * r;
+          return (
+            <React.Fragment key={r}>
+              <Line
+                x1={CHART_PT.left} y1={y}
+                x2={CHART_W - CHART_PT.right} y2={y}
+                stroke={FinanceTheme.divider} strokeWidth="0.5"
+              />
+              <SvgText
+                x={CHART_PT.left} y={y - 3}
+                fontSize="8" fill={FinanceTheme.textMuted}
+                fontFamily="Inter_400Regular"
+              >
+                {formatCurrency(price)}
+              </SvgText>
+            </React.Fragment>
+          );
+        })}
+
+        {/* Candles */}
+        {displayCandles.map((c, i) => {
+          const cx = CHART_PT.left + i * step + step / 2;
+          const isGreen = c.close >= c.open;
+          const color = isGreen ? FinanceTheme.profit : FinanceTheme.loss;
+          const bodyTop = toY(Math.max(c.open, c.close));
+          const bodyH = Math.max(1, Math.abs(toY(c.open) - toY(c.close)));
+          const wickTop = toY(c.high);
+          const wickBottom = toY(c.low);
+          const halfW = candleW / 2;
+          const isDimmed = tooltipIdx !== null && tooltipIdx !== i;
+
+          return (
+            <React.Fragment key={i}>
+              {/* Wick */}
+              <Line
+                x1={cx} y1={wickTop} x2={cx} y2={wickBottom}
+                stroke={color} strokeWidth="1"
+                opacity={isDimmed ? 0.3 : 1}
+              />
+              {/* Body */}
+              <Rect
+                x={cx - halfW} y={bodyTop}
+                width={candleW} height={bodyH}
+                fill={isGreen ? color : 'none'}
+                stroke={color}
+                strokeWidth={isGreen ? 0 : 1}
+                opacity={isDimmed ? 0.3 : 1}
+                rx={1}
+              />
+            </React.Fragment>
+          );
+        })}
+
+        {/* Tooltip crosshair */}
+        {tooltipIdx !== null && (
+          <Line
+            x1={tooltipX} y1={CHART_PT.top}
+            x2={tooltipX} y2={CHART_PT.top + innerH}
+            stroke={FinanceTheme.textMuted} strokeWidth="1" strokeDasharray="4 3"
+          />
+        )}
+      </Svg>
+
+      {/* Tooltip bubble */}
+      {tooltipCandle && (
+        <View
+          style={[
+            chartStyles.tooltipBubble,
+            { left: Math.min(Math.max(tooltipX - 60, 0), CHART_W - 120) },
+          ]}
+          pointerEvents="none"
+        >
+          <Caption style={chartStyles.tooltipDate}>{formatDate(tooltipCandle.date)}</Caption>
+          <View style={chartStyles.tooltipRow}>
+            <Caption style={chartStyles.tooltipKey}>A</Caption>
+            <Caption style={chartStyles.tooltipVal}>{formatCurrency(tooltipCandle.open)}</Caption>
+          </View>
+          <View style={chartStyles.tooltipRow}>
+            <Caption style={[chartStyles.tooltipKey, { color: FinanceTheme.profit }]}>Y</Caption>
+            <Caption style={chartStyles.tooltipVal}>{formatCurrency(tooltipCandle.high)}</Caption>
+          </View>
+          <View style={chartStyles.tooltipRow}>
+            <Caption style={[chartStyles.tooltipKey, { color: FinanceTheme.loss }]}>D</Caption>
+            <Caption style={chartStyles.tooltipVal}>{formatCurrency(tooltipCandle.low)}</Caption>
+          </View>
+          <View style={chartStyles.tooltipRow}>
+            <Caption style={chartStyles.tooltipKey}>K</Caption>
+            <Caption style={[chartStyles.tooltipVal, { fontFamily: Fonts.semiBold }]}>{formatCurrency(tooltipCandle.close)}</Caption>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' });
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
+const chartStyles = StyleSheet.create({
+  empty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: FinanceTheme.card,
+    borderRadius: Radii.md,
+  },
+  tooltipBubble: {
+    position: 'absolute',
+    top: 8,
+    width: 120,
+    backgroundColor: FinanceTheme.card,
+    borderRadius: Radii.md,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: FinanceTheme.cardBorder,
+  },
+  tooltipDate: { color: FinanceTheme.textMuted, fontSize: 9, marginBottom: 4 },
+  tooltipRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
+  tooltipKey: { color: FinanceTheme.textMuted, fontSize: 10, width: 12 },
+  tooltipVal: { color: FinanceTheme.text, fontSize: 10 },
+});
+
+// ─── Main Screen ──────────────────────────────────────────────
 export default function StockDetailScreen() {
   const { symbol } = useLocalSearchParams<{ symbol: string }>();
   const router = useRouter();
+
   const [stock, setStock] = useState<Stock | null>(null);
-  const [chartData, setChartData] = useState<number[]>([]);
+  const [ohlcv, setOhlcv] = useState<OHLCVWithChange>({
+    candles: [], closes: [], periodChangePercent: 0, dates: [],
+  });
+  const [news, setNews] = useState<StockNewsItem[]>([]);
   const [timeframe, setTimeframe] = useState<Timeframe>('1A');
   const [loading, setLoading] = useState(true);
-  const [tooltipInfo, setTooltipInfo] = useState<{ visible: boolean; index: number } | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [favorite, setFavorite] = useState(false);
 
-  const loadData = useCallback(async () => {
+  // Info modal
+  const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
+  const modalAnim = useRef(new Animated.Value(0)).current;
+
+  const showModal = (title: string, description: string) => {
+    setInfoModal({ title, description });
+    Animated.spring(modalAnim, {
+      toValue: 1, useNativeDriver: true, tension: 80, friction: 10,
+    }).start();
+  };
+  const hideModal = () => {
+    Animated.timing(modalAnim, { toValue: 0, duration: 160, useNativeDriver: true }).start(
+      () => setInfoModal(null)
+    );
+  };
+
+  // Initial load
+  const loadAll = useCallback(async () => {
     if (!symbol) return;
     setLoading(true);
-    const [stockRes, chartRes] = await Promise.all([
+    const [stockRes, ohlcvRes, newsRes, favRes] = await Promise.all([
       fetchStockDetail(symbol),
-      fetchChartData(symbol, timeframe),
+      fetchOHLCVWithChange(symbol, '1A'),
+      fetchStockNews(symbol, 8),
+      isFavorite(symbol),
     ]);
     setStock(stockRes);
-    setChartData(chartRes);
+    setOhlcv(ohlcvRes);
+    setNews(newsRes);
+    setFavorite(favRes);
     setLoading(false);
-  }, [symbol, timeframe]);
+  }, [symbol]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Chart SVG path
-  const chartPoints = useCallback(() => {
-    if (chartData.length === 0) return '';
-    const min = Math.min(...chartData);
-    const max = Math.max(...chartData);
-    const range = max - min || 1;
-    const stepX = CHART_WIDTH / (chartData.length - 1);
+  // Timeframe change
+  const handleTimeframeChange = useCallback(async (tf: Timeframe) => {
+    setTimeframe(tf);
+    setChartLoading(true);
+    const res = await fetchOHLCVWithChange(symbol as string, tf);
+    setOhlcv(res);
+    setChartLoading(false);
+  }, [symbol]);
 
-    return chartData
-      .map((val, i) => {
-        const x = i * stepX;
-        const y = CHART_HEIGHT - ((val - min) / range) * (CHART_HEIGHT - 20) - 10;
-        return `${x},${y}`;
-      })
-      .join(' ');
-  }, [chartData]);
+  // Favorite toggle
+  const handleFavorite = async () => {
+    if (!symbol) return;
+    const newState = await toggleFavorite(symbol as string);
+    setFavorite(newState);
+  };
 
-  if (loading || !stock) {
+  // ── Loading state ──
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <SkeletonCard />
-          <View style={{ marginTop: 16 }}>
-            <SkeletonCard />
+        {/* Minimal header while loading */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color={FinanceTheme.text} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <H3>{symbol}</H3>
           </View>
+          <View style={styles.favoriteButton} />
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <SkeletonStockDetail />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (!stock) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={[styles.header]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color={FinanceTheme.text} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}><H3>{symbol}</H3></View>
+          <View style={styles.favoriteButton} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color={FinanceTheme.textMuted} />
+          <Body style={{ color: FinanceTheme.textMuted, marginTop: 12 }}>
+            Hisse verisi yüklenemedi.
+          </Body>
         </View>
       </SafeAreaView>
     );
   }
 
-  const isPositive = stock.change >= 0;
+  const isPositive = ohlcv.periodChangePercent >= 0;
   const changeColor = isPositive ? FinanceTheme.profit : FinanceTheme.loss;
   const changeBg = isPositive ? FinanceTheme.profitBg : FinanceTheme.lossBg;
-  const chartColor = isPositive ? FinanceTheme.profit : FinanceTheme.loss;
 
-  // Metrik verileri
-  const metrics = [
-    { label: 'F/K', value: stock.pe.toFixed(1), tooltip: 'Fiyat/Kazanç oranı. Hissenin kârına göre ne kadar pahalı olduğunu gösterir.' },
-    { label: 'PD/DD', value: stock.pb.toFixed(2), tooltip: 'Piyasa Değeri / Defter Değeri oranı. Şirketin varlıklarına kıyasla piyasa fiyatını gösterir.' },
-    { label: 'HBK', value: '₺' + stock.eps.toFixed(2), tooltip: 'Hisse Başına Kâr. Şirketin net kârının hisse sayısına bölümüdür.' },
-    { label: 'Piyasa D.', value: formatLargeNumber(stock.marketCap) + ' TL', tooltip: 'Toplam piyasa değeri (milyon TL cinsinden).' },
-    { label: 'Hacim', value: formatLargeNumber(stock.volume), tooltip: 'Günlük işlem hacmi (lot sayısı).' },
-    { label: 'Temettü', value: stock.dividendYield.toFixed(1) + '%', tooltip: 'Yıllık temettü verimi. Hisse fiyatına göre temettü getirisi.' },
+  // ── Metrics ──
+  type MetricDef = {
+    label: string;
+    value: string;
+    description: string;
+    hasValue: boolean;
+  };
+
+  const allMetrics: MetricDef[] = [
+    {
+      label: 'Açılış',
+      value: stock.open > 0 ? formatCurrency(stock.open) : '—',
+      hasValue: stock.open > 0,
+      description: 'Günün açılış fiyatı. Piyasanın o gün işleme başladığı ilk fiyat seviyesidir.',
+    },
+    {
+      label: 'Tavan',
+      value: stock.upperLimit != null ? formatCurrency(stock.upperLimit) : '—',
+      hasValue: stock.upperLimit != null,
+      description: 'Günlük tavan fiyat. BIST\'te hisse fiyatları bir günde önceki kapanışa göre en fazla %10 yükselebilir. Bu, teorik üst limitdir.',
+    },
+    {
+      label: 'Taban',
+      value: stock.lowerLimit != null ? formatCurrency(stock.lowerLimit) : '—',
+      hasValue: stock.lowerLimit != null,
+      description: 'Günlük taban fiyat. BIST\'te hisse fiyatları bir günde önceki kapanışa göre en fazla %10 düşebilir. Bu, teorik alt limitdir.',
+    },
+    {
+      label: '52H Yük.',
+      value: stock.fiftyTwoWeekHigh != null ? formatCurrency(stock.fiftyTwoWeekHigh) : '—',
+      hasValue: stock.fiftyTwoWeekHigh != null,
+      description: '52 Haftalık En Yüksek Fiyat. Son 1 yılda ulaşılan zirve. Mevcut fiyatla kıyaslanarak hissenin yıllık performansı değerlendirilebilir.',
+    },
+    {
+      label: '52H Düş.',
+      value: stock.fiftyTwoWeekLow != null ? formatCurrency(stock.fiftyTwoWeekLow) : '—',
+      hasValue: stock.fiftyTwoWeekLow != null,
+      description: '52 Haftalık En Düşük Fiyat. Son 1 yılda görülen dip. Teknik analizde destek bölgesi olarak kullanılır.',
+    },
+    {
+      label: 'F/K',
+      value: stock.pe > 0 ? stock.pe.toFixed(1) : '—',
+      hasValue: stock.pe > 0,
+      description: 'Fiyat/Kazanç Oranı. Hisse fiyatının hisse başına kâra oranıdır. Düşük F/K ucuz, yüksek F/K pahalı hisseye işaret edebilir.',
+    },
+    {
+      label: 'PD/DD',
+      value: stock.pb > 0 ? stock.pb.toFixed(2) : '—',
+      hasValue: stock.pb > 0,
+      description: 'Piyasa Değeri / Defter Değeri. Borsadaki toplam değerin net varlık değerine oranıdır. 1\'in altı teorik olarak "ucuz" sayılır.',
+    },
+    {
+      label: 'HBK',
+      value: stock.eps > 0 ? '₺' + stock.eps.toFixed(2) : '—',
+      hasValue: stock.eps > 0,
+      description: 'Hisse Başına Kâr. Şirketin net kârının toplam hisse adedine bölümüdür.',
+    },
+    {
+      label: 'EV/EBITDA',
+      value: stock.enterpriseToEbitda != null ? stock.enterpriseToEbitda.toFixed(1) : '—',
+      hasValue: stock.enterpriseToEbitda != null,
+      description: 'Firma Değeri / FAVÖK. Farklı sermaye yapılarındaki şirketleri karşılaştırmak için kullanılan değerleme çarpanıdır.',
+    },
+    {
+      label: 'Beta',
+      value: stock.beta != null ? stock.beta.toFixed(2) : '—',
+      hasValue: stock.beta != null,
+      description: 'Hissenin piyasa geneline göre volatilite katsayısı. 1\'den büyükse piyasadan daha hareketli, küçükse daha sakin demektir.',
+    },
+    {
+      label: 'Temettü',
+      value: stock.dividendYield > 0 ? stock.dividendYield.toFixed(1) + '%' : '—',
+      hasValue: stock.dividendYield > 0,
+      description: 'Yıllık Temettü Verimi. Hisse başına ödenen yıllık temettünün mevcut fiyata oranıdır.',
+    },
+    {
+      label: 'Piyasa D.',
+      value: stock.marketCap > 0 ? formatLargeNumber(stock.marketCap) + ' ₺' : '—',
+      hasValue: stock.marketCap > 0,
+      description: 'Piyasa Değeri. Şirketin borsadaki toplam değeridir. Hisse fiyatı × Dolaşımdaki hisse sayısı.',
+    },
+    {
+      label: 'Hacim',
+      value: stock.volume > 0 ? formatLargeNumber(stock.volume) : '—',
+      hasValue: stock.volume > 0,
+      description: 'Günlük İşlem Hacmi. O gün el değiştiren toplam hisse lotudur. Yüksek hacim güçlü ilgi ve likidite demektir.',
+    },
+    {
+      label: 'Yab. Oranı',
+      value: stock.foreignRatio != null ? stock.foreignRatio.toFixed(1) + '%' : '—',
+      hasValue: stock.foreignRatio != null,
+      description: 'Yabancı Yatırımcı Oranı. Hissede yabancıların elinde bulunan pay yüzdesidir.',
+    },
+    {
+      label: '50G Ort.',
+      value: stock.fiftyDayAvg != null ? formatCurrency(stock.fiftyDayAvg) : '—',
+      hasValue: stock.fiftyDayAvg != null,
+      description: '50 Günlük Hareketli Ortalama. Kısa-orta vadeli trend yönünü belirlemek için kullanılır.',
+    },
+    {
+      label: '200G Ort.',
+      value: stock.twoHundredDayAvg != null ? formatCurrency(stock.twoHundredDayAvg) : '—',
+      hasValue: stock.twoHundredDayAvg != null,
+      description: '200 Günlük Hareketli Ortalama. Uzun vadeli trend göstergesi. Bu ortalamanın üzeri "boğa", altı "ayı" eğilimi.',
+    },
   ];
+
+  // Sadece verisi olanları göster
+  const visibleMetrics = allMetrics.filter((m) => m.hasValue);
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Custom Header */}
+      {/* ─── Header ─── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={FinanceTheme.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <H3>{stock.symbol}</H3>
-          <Caption>{stock.name}</Caption>
+          <Caption numberOfLines={1} style={styles.headerSub}>{stock.name}</Caption>
         </View>
-        <TouchableOpacity style={styles.favoriteButton}>
-          <Ionicons name="star-outline" size={22} color={FinanceTheme.textMuted} />
+        <TouchableOpacity style={styles.favoriteButton} onPress={handleFavorite}>
+          <Ionicons
+            name={favorite ? 'star' : 'star-outline'}
+            size={22}
+            color={favorite ? '#F59E0B' : FinanceTheme.textMuted}
+          />
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Fiyat Alanı */}
+        {/* ─── Price ─── */}
         <View style={styles.priceSection}>
           <H1 numeric style={styles.priceText}>{formatCurrency(stock.price)}</H1>
           <View style={[styles.changeBadge, { backgroundColor: changeBg }]}>
             <Ionicons
-              name={isPositive ? 'caret-up' : 'caret-down'}
-              size={14}
-              color={changeColor}
+              name={stock.change >= 0 ? 'caret-up' : 'caret-down'}
+              size={13}
+              color={stock.change >= 0 ? FinanceTheme.profit : FinanceTheme.loss}
             />
-            <Typography variant="body" numeric style={[styles.changeText, { color: changeColor }]}>
+            <Typography
+              variant="body"
+              numeric
+              style={[
+                styles.changeText,
+                { color: stock.change >= 0 ? FinanceTheme.profit : FinanceTheme.loss },
+              ]}
+            >
               {formatCurrency(Math.abs(stock.changeAmount))} ({formatPercent(stock.change)})
             </Typography>
           </View>
         </View>
 
-        {/* ─── Grafik ─────────────────────────────────── */}
-        <View style={styles.chartContainer}>
-          <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
-            <Polyline
-              points={chartPoints()}
-              fill="none"
-              stroke={chartColor}
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          </Svg>
-        </View>
-
-        {/* Timeframe Selector */}
+        {/* ─── Timeframe Tabs ─── */}
         <View style={styles.timeframeRow}>
-          {TIMEFRAMES.map((tf) => (
+          {TIMEFRAMES.map(({ key, label }) => (
             <TouchableOpacity
-              key={tf}
-              style={[
-                styles.timeframeButton,
-                timeframe === tf && styles.timeframeActive,
-              ]}
-              onPress={() => setTimeframe(tf)}
+              key={key}
+              style={[styles.tfBtn, timeframe === key && styles.tfBtnActive]}
+              onPress={() => handleTimeframeChange(key)}
               activeOpacity={0.7}
             >
-              <Caption
-                style={[
-                  styles.timeframeText,
-                  timeframe === tf && styles.timeframeTextActive,
-                ]}
-              >
-                {tf}
+              <Caption style={[styles.tfText, timeframe === key && styles.tfTextActive]}>
+                {label}
               </Caption>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* ─── Gün İçi Bilgileri ──────────────────────── */}
-        <Card variant="default" padding="md" style={styles.dayInfoCard}>
-          <View style={styles.dayInfoRow}>
-            <DayInfoItem label="Açılış" value={formatCurrency(stock.open)} />
-            <DayInfoItem label="Yüksek" value={formatCurrency(stock.high)} color={FinanceTheme.profit} />
-            <DayInfoItem label="Düşük" value={formatCurrency(stock.low)} color={FinanceTheme.loss} />
-            <DayInfoItem label="Ön. Kapanış" value={formatCurrency(stock.prevClose)} />
+        {/* ─── Period Change Badge ─── */}
+        <View style={styles.periodRow}>
+          {chartLoading ? (
+            <View style={[styles.periodBadge, { backgroundColor: FinanceTheme.surface }]}>
+              <Caption style={{ color: FinanceTheme.textMuted }}>Yükleniyor…</Caption>
+            </View>
+          ) : (
+            <View style={[styles.periodBadge, { backgroundColor: isPositive ? FinanceTheme.profitBg : FinanceTheme.lossBg }]}>
+              <Ionicons
+                name={isPositive ? 'trending-up' : 'trending-down'}
+                size={15}
+                color={changeColor}
+              />
+              <Typography variant="bodySmall" numeric style={[styles.periodText, { color: changeColor }]}>
+                {timeframe === '1G' ? 'Bugün' : timeframe === '1H' ? 'Bu Hafta' : timeframe === '1A' ? 'Bu Ay' : 'Bu Yıl'}
+                {'  '}
+                {ohlcv.periodChangePercent >= 0 ? '+' : ''}{ohlcv.periodChangePercent.toFixed(2)}%
+              </Typography>
+            </View>
+          )}
+        </View>
+
+        {/* ─── Candlestick Chart ─── */}
+        <View style={styles.chartContainer}>
+          {chartLoading ? (
+            <View style={[{ height: CHART_H, width: CHART_W }, styles.chartLoadingBox]}>
+              <Caption style={{ color: FinanceTheme.textMuted }}>Grafik yükleniyor…</Caption>
+            </View>
+          ) : (
+            <CandlestickChart
+              candles={ohlcv.candles}
+              chartColor={changeColor}
+              periodChangePercent={ohlcv.periodChangePercent}
+            />
+          )}
+        </View>
+
+        {/* ─── Gün İçi Bilgileri ─── */}
+        <Card variant="default" padding="md" style={styles.dayCard}>
+          <View style={styles.dayRow}>
+            <DayItem label="Açılış" value={formatCurrency(stock.open)} />
+            <DayItem label="Yüksek" value={formatCurrency(stock.high)} color={FinanceTheme.profit} />
+            <DayItem label="Düşük" value={formatCurrency(stock.low)} color={FinanceTheme.loss} />
+            <DayItem label="Ön. Kapanış" value={formatCurrency(stock.prevClose)} />
           </View>
         </Card>
 
-        {/* ─── Temel Veriler Grid ─────────────────────── */}
-        <View style={styles.metricsHeader}>
-          <Caption style={styles.sectionLabel}>TEMEL VERİLER</Caption>
-        </View>
-        <View style={styles.metricsGrid}>
-          {metrics.map((m) => (
-            <MetricCard key={m.label} label={m.label} value={m.value} tooltip={m.tooltip} />
-          ))}
-        </View>
+        {/* ─── Temel Veriler ─── */}
+        {visibleMetrics.length > 0 && (
+          <>
+            <SectionHeader label="TEMEL VERİLER" />
+            <View style={styles.metricsGrid}>
+              {visibleMetrics.map((m) => (
+                <MetricCard
+                  key={m.label}
+                  label={m.label}
+                  value={m.value}
+                  onInfo={() => showModal(m.label, m.description)}
+                />
+              ))}
+            </View>
+          </>
+        )}
 
-        {/* ─── Sektör Bilgisi ─────────────────────────── */}
-        <Card variant="default" padding="md" style={styles.sectorCard}>
-          <View style={styles.sectorRow}>
-            <Caption>Sektör</Caption>
-            <Body style={{ fontFamily: Fonts.semiBold }}>{stock.sector}</Body>
-          </View>
+        {/* ─── Şirket Profili ─── */}
+        <SectionHeader label="ŞİRKET PROFİLİ" />
+        <Card variant="default" padding="md" style={styles.profileCard}>
+          {stock.sector ? <ProfileRow label="Sektör" value={stock.sector} /> : null}
+          {stock.industry ? <ProfileRow label="Endüstri" value={stock.industry} /> : null}
+          {stock.website ? (
+            <TouchableOpacity onPress={() => Linking.openURL(stock.website!)} activeOpacity={0.7}>
+              <ProfileRow label="Website" value={stock.website} isLink />
+            </TouchableOpacity>
+          ) : null}
+          {stock.description ? (
+            <View style={styles.descBox}>
+              <Caption style={styles.descLabel}>Hakkında</Caption>
+              <Body style={styles.descText} numberOfLines={6}>{stock.description}</Body>
+            </View>
+          ) : null}
+          {!stock.sector && !stock.industry && !stock.website && !stock.description && (
+            <Caption style={{ color: FinanceTheme.textMuted }}>Profil bilgisi bulunamadı.</Caption>
+          )}
         </Card>
+
+        {/* ─── İlgili Haberler ─── */}
+        {news.length > 0 && (
+          <>
+            <SectionHeader label="İLGİLİ HABERLER" />
+            <View style={styles.newsList}>
+              {news.map((item, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={styles.newsCard}
+                  onPress={() => item.url ? Linking.openURL(item.url) : null}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.newsContent}>
+                    <Body style={styles.newsTitle} numberOfLines={2}>{item.title}</Body>
+                    <Caption style={styles.newsDate}>{formatDate(item.date)}</Caption>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={FinanceTheme.textMuted} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
 
         <DataSourceFooter />
-        <View style={{ height: 20 }} />
+        <View style={{ height: 24 }} />
       </ScrollView>
+
+      {/* ─── Info Modal ─── */}
+      {infoModal && (
+        <Modal transparent animationType="none" onRequestClose={hideModal}>
+          <TouchableWithoutFeedback onPress={hideModal}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <Animated.View
+                  style={[
+                    styles.modalCard,
+                    {
+                      opacity: modalAnim,
+                      transform: [
+                        {
+                          scale: modalAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.92, 1],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <View style={styles.modalHeader}>
+                    <View style={styles.modalIconWrap}>
+                      <Ionicons name="information-circle" size={20} color={FinanceTheme.primary} />
+                    </View>
+                    <Body style={styles.modalTitle}>{infoModal.title}</Body>
+                    <TouchableOpacity onPress={hideModal} style={{ padding: 4 }}>
+                      <Ionicons name="close" size={20} color={FinanceTheme.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.modalDivider} />
+                  <Body style={styles.modalDesc}>{infoModal.description}</Body>
+                </Animated.View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
 
-// ─── Day Info Item ───────────────────────────────────────────
-function DayInfoItem({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
+// ─── Sub-components ───────────────────────────────────────────
+
+function SectionHeader({ label }: { label: string }) {
   return (
-    <View style={styles.dayInfoItem}>
-      <Caption style={styles.dayInfoLabel}>{label}</Caption>
-      <Typography
-        variant="bodySmall"
-        numeric
-        style={[styles.dayInfoValue, color ? { color } : {}]}
-      >
+    <View style={styles.sectionHeader}>
+      <Caption style={styles.sectionLabel}>{label}</Caption>
+    </View>
+  );
+}
+
+function DayItem({
+  label, value, color,
+}: { label: string; value: string; color?: string }) {
+  return (
+    <View style={styles.dayItem}>
+      <Caption style={styles.dayLabel}>{label}</Caption>
+      <Typography variant="bodySmall" numeric style={[styles.dayValue, color ? { color } : {}]}>
         {value}
       </Typography>
     </View>
   );
 }
 
-// ─── Metric Card with Tooltip ────────────────────────────────
 function MetricCard({
-  label,
-  value,
-  tooltip,
-}: {
-  label: string;
-  value: string;
-  tooltip: string;
-}) {
-  const [showTooltip, setShowTooltip] = useState(false);
-
+  label, value, onInfo,
+}: { label: string; value: string; onInfo: () => void }) {
   return (
-    <TouchableOpacity
-      style={styles.metricCard}
-      activeOpacity={0.7}
-      onPress={() => setShowTooltip(!showTooltip)}
-    >
+    <View style={styles.metricCard}>
       <View style={styles.metricHeader}>
         <Caption style={styles.metricLabel}>{label}</Caption>
-        <Ionicons
-          name="information-circle-outline"
-          size={14}
-          color={FinanceTheme.textMuted}
-        />
+        <TouchableOpacity onPress={onInfo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="information-circle-outline" size={15} color={FinanceTheme.primary} />
+        </TouchableOpacity>
       </View>
-      <H3 numeric style={styles.metricValue}>{value}</H3>
-      {showTooltip && (
-        <View style={styles.tooltipContainer}>
-          <Caption style={styles.tooltipText}>{tooltip}</Caption>
-        </View>
-      )}
-    </TouchableOpacity>
+      <Typography variant="body" numeric style={styles.metricValue}>
+        {value}
+      </Typography>
+    </View>
+  );
+}
+
+function ProfileRow({
+  label, value, isLink,
+}: { label: string; value: string; isLink?: boolean }) {
+  return (
+    <View style={styles.profileRow}>
+      <Caption style={styles.profileLabel}>{label}</Caption>
+      <Body
+        style={[styles.profileValue, isLink && { color: FinanceTheme.primary }]}
+        numberOfLines={1}
+      >
+        {value}
+      </Body>
+    </View>
   );
 }
 
 // ─── Styles ──────────────────────────────────────────────────
+const METRIC_COL_COUNT = 2;
+const METRIC_GAP = 10;
+const METRIC_W =
+  (SCREEN_WIDTH - H_PADDING * 2 - METRIC_GAP * (METRIC_COL_COUNT - 1)) / METRIC_COL_COUNT;
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: FinanceTheme.background,
-  },
-  loadingContainer: {
-    padding: Spacing.xl,
-    paddingTop: 60,
-  },
+  container: { flex: 1, backgroundColor: FinanceTheme.background },
+  errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
   // Header
   header: {
     flexDirection: 'row',
@@ -283,150 +804,158 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: FinanceTheme.divider,
   },
-  backButton: {
-    padding: 4,
-  },
-  headerCenter: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  favoriteButton: {
-    padding: 4,
-  },
+  backButton: { padding: 4, width: 36 },
+  headerCenter: { alignItems: 'center', flex: 1 },
+  headerSub: { color: FinanceTheme.textMuted, marginTop: 1 },
+  favoriteButton: { padding: 4, width: 36, alignItems: 'flex-end' },
+
   // Price
-  priceSection: {
-    alignItems: 'center',
-    paddingTop: Spacing.xl,
-    paddingBottom: Spacing.md,
-  },
-  priceText: {
-    fontSize: 36,
-    marginBottom: Spacing.sm,
-  },
+  priceSection: { alignItems: 'center', paddingTop: Spacing.xl, paddingBottom: Spacing.sm },
+  priceText: { fontSize: 38, marginBottom: Spacing.sm },
   changeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
-    borderRadius: 10,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: Spacing.md, paddingVertical: 6,
+    borderRadius: 10, gap: 4,
   },
-  changeText: {
-    fontSize: 15,
-    fontFamily: Fonts.semiBold,
-    marginLeft: 6,
-    lineHeight: 20,
-  },
-  // Chart
-  chartContainer: {
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    alignItems: 'center',
-  },
+  changeText: { fontSize: 14, fontFamily: Fonts.semiBold, lineHeight: 20 },
+
   // Timeframe
   timeframeRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingBottom: Spacing.xl,
-    gap: Spacing.sm,
+    flexDirection: 'row', justifyContent: 'center',
+    paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: 8,
   },
-  timeframeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: FinanceTheme.surface,
+  tfBtn: {
+    paddingHorizontal: 20, paddingVertical: 8,
+    borderRadius: 20, backgroundColor: FinanceTheme.surface,
+    borderWidth: 1, borderColor: 'transparent',
   },
-  timeframeActive: {
-    backgroundColor: FinanceTheme.primary,
+  tfBtnActive: {
+    backgroundColor: FinanceTheme.primary + '22',
+    borderColor: FinanceTheme.primary,
   },
-  timeframeText: {
-    fontFamily: Fonts.semiBold,
-    color: FinanceTheme.textSecondary,
+  tfText: { fontFamily: Fonts.semiBold, color: FinanceTheme.textSecondary },
+  tfTextActive: { color: FinanceTheme.primary },
+
+  // Period change
+  periodRow: { alignItems: 'center', paddingBottom: Spacing.sm },
+  periodBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
   },
-  timeframeTextActive: {
-    color: '#FFFFFF',
-  },
-  // Day Info
-  dayInfoCard: {
-    marginHorizontal: Spacing.xl,
-    marginBottom: Spacing.lg,
-  },
-  dayInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dayInfoItem: {
+  periodText: { fontFamily: Fonts.semiBold, fontSize: 14 },
+
+  // Chart
+  chartContainer: {
+    paddingHorizontal: H_PADDING,
+    paddingVertical: Spacing.md,
     alignItems: 'center',
   },
-  dayInfoLabel: {
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
+  chartLoadingBox: {
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: FinanceTheme.card, borderRadius: Radii.md,
   },
-  dayInfoValue: {
-    fontFamily: Fonts.semiBold,
-    color: FinanceTheme.text,
-  },
-  // Metrics
-  metricsHeader: {
-    paddingHorizontal: Spacing.xl,
+
+  // Day info
+  dayCard: { marginHorizontal: H_PADDING, marginBottom: Spacing.md },
+  dayRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  dayItem: { alignItems: 'center' },
+  dayLabel: { fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  dayValue: { fontFamily: Fonts.semiBold, color: FinanceTheme.text },
+
+  // Section header
+  sectionHeader: {
+    paddingHorizontal: H_PADDING,
+    paddingTop: Spacing.md,
     paddingBottom: Spacing.sm,
   },
   sectionLabel: {
-    fontSize: 11,
-    fontFamily: Fonts.semiBold,
+    fontSize: 11, fontFamily: Fonts.semiBold,
     color: FinanceTheme.textMuted,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    letterSpacing: 1.2, textTransform: 'uppercase',
   },
+
+  // Metrics — 2-column responsive
   metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
+    flexDirection: 'row', flexWrap: 'wrap',
+    paddingHorizontal: H_PADDING,
+    gap: METRIC_GAP, marginBottom: Spacing.md,
   },
   metricCard: {
-    width: (SCREEN_WIDTH - 40 - 24) / 3,
+    width: METRIC_W,
     backgroundColor: FinanceTheme.card,
-    borderRadius: Radii.md,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: FinanceTheme.cardBorder,
+    borderRadius: Radii.lg,
+    padding: 14,
+    borderWidth: 1, borderColor: FinanceTheme.cardBorder,
+    minHeight: 80,
+    justifyContent: 'space-between',
   },
   metricHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 8,
   },
   metricLabel: {
-    fontSize: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontSize: 11, textTransform: 'uppercase',
+    letterSpacing: 0.5, color: FinanceTheme.textMuted,
   },
   metricValue: {
-    fontSize: 16,
+    fontFamily: Fonts.semiBold, color: FinanceTheme.text,
+    fontSize: 15,
   },
-  tooltipContainer: {
-    backgroundColor: FinanceTheme.surface,
-    borderRadius: 8,
-    padding: 8,
-    marginTop: 6,
+
+  // Profile
+  profileCard: { marginHorizontal: H_PADDING, marginBottom: Spacing.md },
+  profileRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: FinanceTheme.divider,
   },
-  tooltipText: {
-    fontSize: 11,
-    lineHeight: 15,
-    color: FinanceTheme.textSecondary,
+  profileLabel: { color: FinanceTheme.textMuted, fontSize: 12 },
+  profileValue: {
+    fontFamily: Fonts.semiBold, color: FinanceTheme.text,
+    fontSize: 13, maxWidth: '60%', textAlign: 'right',
   },
-  // Sector
-  sectorCard: {
-    marginHorizontal: Spacing.xl,
-    marginBottom: Spacing.lg,
+  descBox: { paddingTop: 10 },
+  descLabel: {
+    color: FinanceTheme.textMuted, fontSize: 10,
+    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6,
   },
-  sectorRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  descText: { color: FinanceTheme.textSecondary, fontSize: 13, lineHeight: 20 },
+
+  // News
+  newsList: { paddingHorizontal: H_PADDING, marginBottom: Spacing.md, gap: 8 },
+  newsCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: FinanceTheme.card,
+    borderRadius: Radii.lg, padding: 14,
+    borderWidth: 1, borderColor: FinanceTheme.cardBorder,
+    gap: 10,
   },
+  newsContent: { flex: 1 },
+  newsTitle: {
+    color: FinanceTheme.text, fontSize: 13,
+    fontFamily: Fonts.medium, lineHeight: 18, marginBottom: 4,
+  },
+  newsDate: { color: FinanceTheme.textMuted, fontSize: 11 },
+
+  // Modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  modalCard: {
+    width: '100%', backgroundColor: FinanceTheme.card,
+    borderRadius: Radii.xl, borderWidth: 1,
+    borderColor: FinanceTheme.cardBorder, padding: Spacing.lg,
+  },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  modalIconWrap: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: FinanceTheme.primary + '1A',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalTitle: { fontFamily: Fonts.semiBold, color: FinanceTheme.text, fontSize: 16, flex: 1 },
+  modalDivider: { height: 1, backgroundColor: FinanceTheme.divider, marginVertical: 14 },
+  modalDesc: { color: FinanceTheme.textSecondary, fontSize: 14, lineHeight: 22 },
 });

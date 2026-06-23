@@ -9,7 +9,6 @@ import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
     ActivityIndicator,
-    Alert,
     Dimensions,
     Image,
     KeyboardAvoidingView,
@@ -19,7 +18,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import * as yup from 'yup';
 
@@ -112,7 +111,7 @@ export default function LoginScreen() {
         setApiError(null);
         try {
             await loginApi({ email: data.email, password: data.password });
-            router.replace('/(tabs)/index');
+            router.replace('/(tabs)');
         } catch (error: any) {
             const msg = error?.message ?? 'Giriş sırasında bir hata oluştu.';
             setApiError(msg);

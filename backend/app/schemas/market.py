@@ -30,6 +30,7 @@ class FundamentalMetrics(BaseModel):
     symbol: str
     price: Optional[float] = None
     change_percent: Optional[float] = None
+    change_amount: Optional[float] = None
     market_cap: Optional[float] = None
     pe_ratio: Optional[float] = None  # trailingPE
     pb_ratio: Optional[float] = None  # priceToBook
@@ -44,6 +45,15 @@ class FundamentalMetrics(BaseModel):
     fifty_day_average: Optional[float] = None
     two_hundred_day_average: Optional[float] = None
     beta: Optional[float] = None
+    # Daily OHLC
+    volume: Optional[float] = None
+    open_price: Optional[float] = None
+    day_high: Optional[float] = None
+    day_low: Optional[float] = None
+    prev_close: Optional[float] = None
+    # Tavan / Taban (BIST: ±%10 günlük limit)
+    upper_limit: Optional[float] = None
+    lower_limit: Optional[float] = None
 
 class DividendData(BaseModel):
     date: str

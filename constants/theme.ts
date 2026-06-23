@@ -76,6 +76,9 @@ export const FinanceTheme = {
 
   // Overlays
   overlay: 'rgba(0, 0, 0, 0.6)',
+
+  // Skeleton
+  skeleton: '#1E293B',
 };
 
 export const Spacing = {

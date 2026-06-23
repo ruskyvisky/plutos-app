@@ -21,6 +21,21 @@ export interface Stock {
   pb: number;            // PD/DD
   eps: number;           // Hisse başına kâr
   dividendYield: number; // Temettü verimi %
+  // Genişletilmiş alanlar (detay sayfası)
+  industry?: string;
+  website?: string;
+  description?: string;
+  enterpriseToEbitda?: number;   // EV/EBITDA
+  netDebt?: number;
+  floatShares?: number;
+  foreignRatio?: number;         // Yabancı oranı %
+  beta?: number;
+  fiftyDayAvg?: number;          // 50G hareketli ortalama
+  twoHundredDayAvg?: number;     // 200G hareketli ortalama
+  fiftyTwoWeekHigh?: number;     // 52 haftalık yüksek
+  fiftyTwoWeekLow?: number;      // 52 haftalık düşük
+  upperLimit?: number;           // Günlük tavan fiyat (%+10)
+  lowerLimit?: number;           // Günlük taban fiyat (%-10)
 }
 
 export interface IndexData {

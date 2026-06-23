@@ -8,9 +8,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 
 import { IndexWidget } from '@/components/market/IndexWidget';
+import { FavoriteWidget } from '@/components/market/FavoriteWidget';
 import { PortfolioSummaryCard } from '@/components/market/PortfolioSummaryCard';
 import { StockRow } from '@/components/market/StockRow';
 import { DataSourceFooter } from '@/components/ui/DataSourceFooter';
@@ -46,6 +48,14 @@ export default function MarketScreen() {
     losers: [],
     volume: [],
   });
+  // Favori bölümünü yenilemek için focus trigger
+  const [favTrigger, setFavTrigger] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      setFavTrigger((n) => n + 1);
+    }, [])
+  );
 
   const loadData = useCallback(async () => {
     try {
@@ -127,6 +137,12 @@ export default function MarketScreen() {
             onPress={() => router.push('/(tabs)/portfolio' as any)}
           />
         )}
+
+        {/* Favori Hisseler */}
+        <View style={styles.sectionHeader}>
+          <Caption style={styles.sectionLabel}>FAVORİ HİSSELER</Caption>
+        </View>
+        <FavoriteWidget refreshTrigger={favTrigger} />
 
         {/* Endeksler — yatay scroll */}
         <View style={styles.sectionHeader}>

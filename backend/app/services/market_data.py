@@ -234,10 +234,14 @@ class MarketDataService:
             info = ticker.info
             
             # Detailed metrics from info
+            price_val = info.get("regularMarketPrice") or info.get("last") or 0.0
+            change_pct = info.get("regularMarketChangePercent") or info.get("change_percent") or 0.0
+            change_amt = info.get("regularMarketChange") or (price_val * change_pct / 100) or 0.0
             metrics = {
                 "symbol": symbol,
-                "price": info.get("regularMarketPrice") or info.get("last"),
-                "change_percent": info.get("regularMarketChangePercent") or info.get("change_percent"),
+                "price": price_val,
+                "change_percent": change_pct,
+                "change_amount": change_amt,
                 "market_cap": info.get("marketCap"),
                 "pe_ratio": info.get("trailingPE") or info.get("forwardPE"),
                 "pb_ratio": info.get("priceToBook"),
@@ -251,8 +255,19 @@ class MarketDataService:
                 "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
                 "fifty_day_average": info.get("fiftyDayAverage"),
                 "two_hundred_day_average": info.get("twoHundredDayAverage"),
-                "beta": info.get("beta")
+                "beta": info.get("beta"),
+                # Daily OHLC
+                "volume": info.get("regularMarketVolume") or info.get("volume"),
+                "open_price": info.get("regularMarketOpen") or info.get("open"),
+                "day_high": info.get("regularMarketDayHigh") or info.get("dayHigh"),
+                "day_low": info.get("regularMarketDayLow") or info.get("dayLow"),
+                "prev_close": info.get("regularMarketPreviousClose") or info.get("previousClose"),
             }
+            # Tavan / Taban hesapla (±%10 BIST günlük fiyat limiti)
+            prev = metrics.get("prev_close") or metrics.get("price") or 0
+            if prev:
+                metrics["upper_limit"] = round(prev * 1.10, 2)
+                metrics["lower_limit"] = round(prev * 0.90, 2)
             
             profile = {
                 "symbol": symbol,

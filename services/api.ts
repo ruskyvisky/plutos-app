@@ -74,14 +74,28 @@ interface BackendCompanyProfile {
     symbol: string;
     price?: number;
     change_percent?: number;
+    change_amount?: number;
     market_cap?: number;
     pe_ratio?: number;
     pb_ratio?: number;
     eps?: number;
+    enterprise_to_ebitda?: number;
+    net_debt?: number;
+    float_shares?: number;
+    foreign_ratio?: number;
     dividend_yield?: number;
     fifty_two_week_high?: number;
     fifty_two_week_low?: number;
+    fifty_day_average?: number;
+    two_hundred_day_average?: number;
     beta?: number;
+    volume?: number;
+    open_price?: number;
+    day_high?: number;
+    day_low?: number;
+    prev_close?: number;
+    upper_limit?: number;
+    lower_limit?: number;
   };
   dividends: { date: string; dividend: number }[];
 }
@@ -206,22 +220,53 @@ export async function fetchStockDetail(symbol: string): Promise<Stock | null> {
       sector: profile.sector ?? '',
       price: m?.price ?? 0,
       change: m?.change_percent ?? 0,
-      changeAmount: m?.price && m?.change_percent ? (m.price * m.change_percent) / 100 : 0,
-      volume: 0,
-      high: m?.fifty_two_week_high ?? 0,
-      low: m?.fifty_two_week_low ?? 0,
-      open: 0,
-      prevClose: 0,
+      changeAmount: m?.change_amount ?? (m?.price && m?.change_percent ? (m.price * m.change_percent) / 100 : 0),
+      volume: m?.volume ?? 0,
+      high: m?.day_high ?? m?.fifty_two_week_high ?? 0,
+      low: m?.day_low ?? m?.fifty_two_week_low ?? 0,
+      open: m?.open_price ?? 0,
+      prevClose: m?.prev_close ?? 0,
       marketCap: m?.market_cap ?? 0,
       pe: m?.pe_ratio ?? 0,
       pb: m?.pb_ratio ?? 0,
       eps: m?.eps ?? 0,
       dividendYield: m?.dividend_yield ?? 0,
+      // Extended fields
+      industry: profile.industry,
+      website: profile.website,
+      description: profile.description,
+      enterpriseToEbitda: m?.enterprise_to_ebitda ?? undefined,
+      netDebt: m?.net_debt ?? undefined,
+      floatShares: m?.float_shares ?? undefined,
+      foreignRatio: m?.foreign_ratio ?? undefined,
+      beta: m?.beta ?? undefined,
+      fiftyDayAvg: m?.fifty_day_average ?? undefined,
+      twoHundredDayAvg: m?.two_hundred_day_average ?? undefined,
+      fiftyTwoWeekHigh: m?.fifty_two_week_high ?? undefined,
+      fiftyTwoWeekLow: m?.fifty_two_week_low ?? undefined,
+      upperLimit: m?.upper_limit ?? undefined,
+      lowerLimit: m?.lower_limit ?? undefined,
     };
   } catch (e) {
     console.error('fetchStockDetail error:', e);
     return null;
   }
+}
+
+export interface CandleData {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface OHLCVWithChange {
+  candles: CandleData[];
+  closes: number[];
+  periodChangePercent: number;
+  dates: string[];
 }
 
 export async function fetchChartData(
@@ -235,6 +280,44 @@ export async function fetchChartData(
     return data.data.map((d) => d.close);
   } catch (e) {
     console.error('fetchChartData error:', e);
+    return [];
+  }
+}
+
+export async function fetchOHLCVWithChange(
+  symbol: string,
+  timeframe: '1G' | '1H' | '1A' | '1Y' = '1A'
+): Promise<OHLCVWithChange> {
+  try {
+    const data = await apiFetch<BackendOHLCVResponse>(
+      `/market/ohlcv/${symbol}?period=${timeframe}`
+    );
+    return {
+      candles: data.data,
+      closes: data.data.map((d) => d.close),
+      periodChangePercent: data.period_change_percent,
+      dates: data.data.map((d) => d.date),
+    };
+  } catch (e) {
+    console.error('fetchOHLCVWithChange error:', e);
+    return { candles: [], closes: [], periodChangePercent: 0, dates: [] };
+  }
+}
+
+export interface StockNewsItem {
+  date: string;
+  title: string;
+  url: string;
+}
+
+export async function fetchStockNews(
+  symbol: string,
+  limit = 10
+): Promise<StockNewsItem[]> {
+  try {
+    return await apiFetch<StockNewsItem[]>(`/market/news/${symbol}?limit=${limit}`);
+  } catch (e) {
+    console.error('fetchStockNews error:', e);
     return [];
   }
 }
