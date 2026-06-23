@@ -1,0 +1,120 @@
+import React from 'react';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+import { Body, Caption, Typography } from '@/components/ui/Typography';
+import { FinanceTheme, Fonts, Spacing } from '@/constants/theme';
+import { formatCurrency, formatPercent, type Stock } from '@/services/mockData';
+
+interface StockRowProps {
+  stock: Stock;
+  onPress?: (symbol: string) => void;
+}
+
+export function StockRow({ stock, onPress }: StockRowProps) {
+  const isPositive = stock.change >= 0;
+  const changeColor = isPositive ? FinanceTheme.profit : FinanceTheme.loss;
+  const changeBg = isPositive ? FinanceTheme.profitBg : FinanceTheme.lossBg;
+
+  return (
+    <TouchableOpacity
+      style={styles.container}
+      activeOpacity={0.7}
+      onPress={() => onPress?.(stock.symbol)}
+    >
+      {/* Sol: Sembol & İsim */}
+      <View style={styles.left}>
+        <View style={styles.symbolBadge}>
+          <Typography variant="caption" style={styles.symbolText}>
+            {stock.symbol.slice(0, 2)}
+          </Typography>
+        </View>
+        <View style={styles.nameBlock}>
+          <Body style={styles.symbol}>{stock.symbol}</Body>
+          <Caption numberOfLines={1} style={styles.name}>{stock.name}</Caption>
+        </View>
+      </View>
+
+      {/* Sağ: Fiyat & Değişim */}
+      <View style={styles.right}>
+        <Typography variant="body" numeric style={styles.price}>
+          {formatCurrency(stock.price)}
+        </Typography>
+        <View style={[styles.changeBadge, { backgroundColor: changeBg }]}>
+          <Ionicons
+            name={isPositive ? 'caret-up' : 'caret-down'}
+            size={10}
+            color={changeColor}
+          />
+          <Typography variant="caption" numeric style={[styles.changeText, { color: changeColor }]}>
+            {formatPercent(stock.change)}
+          </Typography>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: FinanceTheme.divider,
+  },
+  left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  symbolBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: FinanceTheme.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
+  },
+  symbolText: {
+    fontFamily: Fonts.bold,
+    color: FinanceTheme.primary,
+    fontSize: 14,
+  },
+  nameBlock: {
+    flex: 1,
+    marginRight: Spacing.sm,
+  },
+  symbol: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  name: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  right: {
+    alignItems: 'flex-end',
+  },
+  price: {
+    fontFamily: Fonts.semiBold,
+    fontSize: 15,
+    marginBottom: 3,
+  },
+  changeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  changeText: {
+    fontFamily: Fonts.semiBold,
+    marginLeft: 3,
+    fontSize: 11,
+  },
+});

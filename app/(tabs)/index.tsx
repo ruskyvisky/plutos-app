@@ -1,98 +1,226 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  FlatList,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useRouter } from 'expo-router';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { IndexWidget } from '@/components/market/IndexWidget';
+import { PortfolioSummaryCard } from '@/components/market/PortfolioSummaryCard';
+import { StockRow } from '@/components/market/StockRow';
+import { DataSourceFooter } from '@/components/ui/DataSourceFooter';
+import { SkeletonCard, SkeletonRow } from '@/components/ui/SkeletonLoader';
+import { H2, Body, Caption } from '@/components/ui/Typography';
+import { FinanceTheme, Fonts, Spacing } from '@/constants/theme';
+import {
+  fetchIndices,
+  fetchPortfolio,
+  fetchTopGainers,
+  fetchTopLosers,
+  fetchTopVolume,
+} from '@/services/api';
+import type { IndexData, PortfolioData, Stock } from '@/services/mockData';
 
-export default function HomeScreen() {
+type TabKey = 'gainers' | 'losers' | 'volume';
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'gainers', label: 'Yükselenler' },
+  { key: 'losers', label: 'Düşenler' },
+  { key: 'volume', label: 'Hacim' },
+];
+
+export default function MarketScreen() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [indices, setIndices] = useState<IndexData[]>([]);
+  const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>('gainers');
+  const [stockData, setStockData] = useState<Record<TabKey, Stock[]>>({
+    gainers: [],
+    losers: [],
+    volume: [],
+  });
+
+  const loadData = useCallback(async () => {
+    try {
+      const [indicesRes, portfolioRes, gainersRes, losersRes, volumeRes] =
+        await Promise.all([
+          fetchIndices(),
+          fetchPortfolio(),
+          fetchTopGainers(),
+          fetchTopLosers(),
+          fetchTopVolume(),
+        ]);
+      setIndices(indicesRes);
+      setPortfolio(portfolioRes);
+      setStockData({ gainers: gainersRes, losers: losersRes, volume: volumeRes });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadData();
+  }, [loadData]);
+
+  const handleStockPress = useCallback(
+    (symbol: string) => {
+      router.push(`/stock/${symbol}` as any);
+    },
+    [router]
+  );
+
+  const activeStocks = stockData[activeTab];
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.skeletonContainer}>
+          <SkeletonCard />
+          <View style={{ marginTop: 16 }}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <SkeletonRow key={i} />
+            ))}
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={FinanceTheme.primary}
+            colors={[FinanceTheme.primary]}
+          />
+        }
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <H2>Piyasa Özeti</H2>
+          <Caption>Canlı veriler</Caption>
+        </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        {/* Portföy Özet */}
+        {portfolio && (
+          <PortfolioSummaryCard
+            totalBalance={portfolio.totalBalance}
+            dailyPL={portfolio.dailyPL}
+            dailyPLPercent={portfolio.dailyPLPercent}
+            onPress={() => router.push('/(tabs)/portfolio' as any)}
+          />
+        )}
+
+        {/* Endeksler — yatay scroll */}
+        <View style={styles.sectionHeader}>
+          <Caption style={styles.sectionLabel}>ENDEKSLER & DÖVİZ</Caption>
+        </View>
+        <IndexWidget data={indices} />
+
+        {/* Hisse Listeleri — Sekmeli */}
+        <View style={styles.tabContainer}>
+          {TABS.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.tab,
+                activeTab === tab.key && styles.tabActive,
+              ]}
+              onPress={() => setActiveTab(tab.key)}
+              activeOpacity={0.7}
+            >
+              <Body
+                style={[
+                  styles.tabText,
+                  activeTab === tab.key && styles.tabTextActive,
+                ]}
+              >
+                {tab.label}
+              </Body>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Hisse Listesi */}
+        {activeStocks.map((stock) => (
+          <StockRow key={stock.symbol} stock={stock} onPress={handleStockPress} />
+        ))}
+
+        <DataSourceFooter />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: FinanceTheme.background,
+  },
+  skeletonContainer: {
+    padding: Spacing.xl,
+    paddingTop: 60,
+  },
+  header: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xxl,
+    paddingBottom: Spacing.lg,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  sectionHeader: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.sm,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  sectionLabel: {
+    fontSize: 11,
+    fontFamily: Fonts.semiBold,
+    color: FinanceTheme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  tab: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: 20,
+    backgroundColor: FinanceTheme.surface,
+  },
+  tabActive: {
+    backgroundColor: FinanceTheme.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    fontFamily: Fonts.medium,
+    color: FinanceTheme.textSecondary,
+    lineHeight: 18,
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
   },
 });

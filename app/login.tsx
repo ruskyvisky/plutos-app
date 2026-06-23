@@ -111,7 +111,7 @@ export default function LoginScreen() {
             // TODO: Gerçek auth API çağrısı burada yapılacak
             console.log('Login attempt:', data.email);
             await new Promise((resolve) => setTimeout(resolve, 1500));
-            router.replace('/(tabs)');
+            router.replace('/(tabs)/index');
         } catch (error) {
             console.error('Login failed:', error);
         } finally {
@@ -120,7 +120,7 @@ export default function LoginScreen() {
     };
 
     const handleGuestMode = () => {
-        router.replace('/(tabs)');
+        router.replace('/(tabs)/index');
     };
 
     return (
