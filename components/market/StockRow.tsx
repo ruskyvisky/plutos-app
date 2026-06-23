@@ -4,7 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Body, Caption, Typography } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Spacing } from '@/constants/theme';
-import { formatCurrency, formatPercent, type Stock } from '@/services/mockData';
+import type { Stock } from '@/services/api';
+import { formatCurrency, formatPercent } from '@/services/mockData';
 
 interface StockRowProps {
   stock: Stock;

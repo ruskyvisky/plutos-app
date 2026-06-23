@@ -18,7 +18,8 @@ import { SkeletonCard } from '@/components/ui/SkeletonLoader';
 import { H1, H2, H3, Body, Caption, Typography } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Radii, Spacing } from '@/constants/theme';
 import { fetchChartData, fetchStockDetail } from '@/services/api';
-import { formatCurrency, formatLargeNumber, formatPercent, type Stock } from '@/services/mockData';
+import type { Stock } from '@/services/api';
+import { formatCurrency, formatLargeNumber, formatPercent } from '@/services/mockData';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 40;

@@ -20,12 +20,8 @@ import { SkeletonCard, SkeletonRow } from '@/components/ui/SkeletonLoader';
 import { H1, H2, H3, Body, Caption, Typography } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Radii, Shadows, Spacing } from '@/constants/theme';
 import { fetchPortfolio, executeTrade } from '@/services/api';
-import {
-  formatCurrency,
-  formatPercent,
-  type Holding,
-  type PortfolioData,
-} from '@/services/mockData';
+import type { Holding, PortfolioData } from '@/services/api';
+import { formatCurrency, formatPercent } from '@/services/mockData';
 
 export default function PortfolioScreen() {
   const router = useRouter();
@@ -66,8 +62,13 @@ export default function PortfolioScreen() {
     setTradeModalVisible(false);
     if (result.success) {
       Alert.alert('✓ Başarılı', result.message);
+      // Portföyü yenile
+      loadData();
+    } else {
+      Alert.alert('Hata', result.message);
     }
   };
+
 
   if (loading || !portfolio) {
     return (
@@ -83,6 +84,7 @@ export default function PortfolioScreen() {
       </SafeAreaView>
     );
   }
+
 
   const isPositiveTotal = portfolio.totalPL >= 0;
   const isPositiveDaily = portfolio.dailyPL >= 0;
@@ -180,16 +182,33 @@ export default function PortfolioScreen() {
           <Caption>{portfolio.holdings.length} varlık</Caption>
         </View>
 
-        {/* Holdings List */}
-        {portfolio.holdings.map((holding) => (
-          <HoldingRow
-            key={holding.symbol}
-            holding={holding}
-            onBuy={() => openTradeSheet(holding, 'buy')}
-            onSell={() => openTradeSheet(holding, 'sell')}
-            onPress={() => router.push(`/stock/${holding.symbol}` as any)}
-          />
-        ))}
+        {/* Holdings List — boşsa yönlendirme kartı */}
+        {portfolio.holdings.length === 0 ? (
+          <Card variant="default" padding="lg" style={styles.emptyCard}>
+            <Ionicons name="wallet-outline" size={40} color={FinanceTheme.textMuted} style={{ alignSelf: 'center', marginBottom: 12 }} />
+            <H3 style={styles.emptyTitle}>Henüz hisseniz yok</H3>
+            <Body style={styles.emptyBody}>
+              Başlangıç bakiyeniz ₺100.000 TL. Keşfet sekmesinden hisse arayıp alım yapabilirsiniz.
+            </Body>
+            <TouchableOpacity
+              style={styles.emptyButton}
+              activeOpacity={0.8}
+              onPress={() => router.push('/(tabs)/discover' as any)}
+            >
+              <Body style={styles.emptyButtonText}>Hisse Keşfet →</Body>
+            </TouchableOpacity>
+          </Card>
+        ) : (
+          portfolio.holdings.map((holding) => (
+            <HoldingRow
+              key={holding.symbol}
+              holding={holding}
+              onBuy={() => openTradeSheet(holding, 'buy')}
+              onSell={() => openTradeSheet(holding, 'sell')}
+              onPress={() => router.push(`/stock/${holding.symbol}` as any)}
+            />
+          ))
+        )}
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -398,6 +417,32 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.semiBold,
     color: FinanceTheme.textMuted,
     letterSpacing: 1,
+  },
+  emptyCard: {
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing.md,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  emptyBody: {
+    textAlign: 'center',
+    color: FinanceTheme.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: Spacing.lg,
+  },
+  emptyButton: {
+    backgroundColor: FinanceTheme.primary,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: Radii.full,
+  },
+  emptyButtonText: {
+    color: '#0F172A',
+    fontFamily: Fonts.semiBold,
   },
   // Holding Row
   holdingRow: {

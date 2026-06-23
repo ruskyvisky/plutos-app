@@ -1,5 +1,6 @@
 import logging
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
@@ -23,6 +24,15 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     lifespan=lifespan
+)
+
+# CORS — Expo Go, web tarayıcı ve yerel ağ cihazları için
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Geliştirme için açık; prodda kısıtlayın
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # API Router'ı dahil et

@@ -4,7 +4,8 @@ import { FlatList, StyleSheet, View } from 'react-native';
 import { Card } from '@/components/ui/Card';
 import { H3, Body, Caption } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Spacing } from '@/constants/theme';
-import { formatPercent, type IndexData } from '@/services/mockData';
+import type { IndexData } from '@/services/api';
+import { formatPercent } from '@/services/mockData';
 
 interface IndexWidgetProps {
   data: IndexData[];

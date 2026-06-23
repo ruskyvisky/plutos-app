@@ -86,3 +86,30 @@ class MarketOverviewResponse(BaseModel):
     top_losers: List[StockData]
     high_volume: List[StockData]
     indices: List[IndexData]
+
+class Holding(BaseModel):
+    symbol: str
+    name: str
+    quantity: int
+    avg_cost: float
+    current_price: float
+
+class PortfolioData(BaseModel):
+    total_balance: float
+    cash: float
+    total_invested: float
+    total_pl: float
+    total_pl_percent: float
+    daily_pl: float
+    daily_pl_percent: float
+    holdings: List[Holding]
+
+class GeneralNewsItem(BaseModel):
+    id: str
+    title: str
+    summary: str
+    source: str
+    date: str
+    symbol: Optional[str] = None
+    url: Optional[str] = None
+    category: str = "piyasa"

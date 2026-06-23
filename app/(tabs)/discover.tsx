@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   FlatList,
@@ -7,16 +8,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 
 import { StockRow } from '@/components/market/StockRow';
 import { DataSourceFooter } from '@/components/ui/DataSourceFooter';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { SkeletonRow } from '@/components/ui/SkeletonLoader';
-import { H2, Body, Caption } from '@/components/ui/Typography';
+import { Body, Caption, H2 } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Spacing } from '@/constants/theme';
+import type { Stock } from '@/services/api';
 import { fetchAllStocks, searchStocks } from '@/services/api';
-import { SECTORS, type Stock } from '@/services/mockData';
+import { SECTORS } from '@/services/mockData';
 
 export default function DiscoverScreen() {
   const router = useRouter();
@@ -194,7 +195,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   emptyContainer: {
-    padding: Spacing.xxxl,
+    padding: Spacing.xxl,
     alignItems: 'center',
   },
   emptyText: {

@@ -38,6 +38,9 @@ export const FinanceTheme = {
   backgroundLight: '#162036',
   card: '#1E293B',
   cardBorder: '#334155',
+  surface: '#334155',
+  tabBar: '#1E293B',
+  divider: '#334155',
 
   // Accent
   primary: '#38BDF8',
@@ -46,6 +49,8 @@ export const FinanceTheme = {
   // Semantic
   profit: '#10B981',
   loss: '#EF4444',
+  profitBg: 'rgba(16, 185, 129, 0.15)',
+  lossBg: 'rgba(239, 68, 68, 0.15)',
 
   // Text
   text: '#F8FAFC',
@@ -63,6 +68,56 @@ export const FinanceTheme = {
   googleText: '#1F2937',
   appleBg: '#000000',
   appleText: '#FFFFFF',
+
+  // Tab bar
+  tabActive: '#38BDF8',
+  tabInactive: '#64748B',
+  tabBarBorder: '#1E293B',
+
+  // Overlays
+  overlay: 'rgba(0, 0, 0, 0.6)',
+};
+
+export const Spacing = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 40,
+  xxxl: 56,
+};
+
+export const Radii = {
+  sm: 4,
+  md: 8,
+  lg: 12,
+  xl: 16,
+  full: 9999,
+};
+
+export const Shadows = {
+  card: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardLight: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  bottomSheet: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 16,
+  },
 };
 
 export const Fonts = {
@@ -70,4 +125,13 @@ export const Fonts = {
   medium: 'Inter_500Medium',
   semiBold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
+};
+
+export const FontSizes = {
+  h1: 32,
+  h2: 24,
+  h3: 20,
+  body: 16,
+  bodySmall: 14,
+  caption: 12,
 };

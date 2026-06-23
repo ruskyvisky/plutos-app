@@ -24,7 +24,7 @@ import {
   fetchTopLosers,
   fetchTopVolume,
 } from '@/services/api';
-import type { IndexData, PortfolioData, Stock } from '@/services/mockData';
+import type { IndexData, PortfolioData, Stock } from '@/services/api';
 
 type TabKey = 'gainers' | 'losers' | 'volume';
 

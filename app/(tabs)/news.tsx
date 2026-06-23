@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   FlatList,
@@ -7,15 +8,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 
 import { Card } from '@/components/ui/Card';
 import { DataSourceFooter } from '@/components/ui/DataSourceFooter';
 import { SkeletonCard } from '@/components/ui/SkeletonLoader';
-import { H2, H3, Body, Caption } from '@/components/ui/Typography';
+import { Body, Caption, H2, H3 } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Spacing } from '@/constants/theme';
+import type { NewsItem } from '@/services/api';
 import { fetchNews } from '@/services/api';
-import type { NewsItem } from '@/services/mockData';
 
 type NewsCategory = 'all' | 'kap' | 'analiz' | 'piyasa' | 'gundem';
 
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     color: FinanceTheme.primary,
   },
   emptyContainer: {
-    padding: Spacing.xxxl,
+    padding: Spacing.xxl,
     alignItems: 'center',
   },
   emptyText: {
