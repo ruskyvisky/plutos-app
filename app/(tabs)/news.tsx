@@ -47,15 +47,22 @@ export default function NewsScreen() {
     setActiveCategory(cat);
   };
 
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr: string): string | null => {
+    if (!dateStr || dateStr.trim() === '') return null;
     const date = new Date(dateStr);
+    // Geçersiz tarih kontrolü
+    if (isNaN(date.getTime())) return null;
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    if (diffHours < 0) return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
     if (diffHours < 1) return 'Az önce';
     if (diffHours < 24) return `${diffHours} saat önce`;
-    return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays} gün önce`;
+    return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
   };
+
 
   const getCategoryColor = (cat: string) => {
     switch (cat) {
@@ -77,7 +84,9 @@ export default function NewsScreen() {
               {item.category.toUpperCase()}
             </Caption>
           </View>
-          <Caption>{formatDate(item.date)}</Caption>
+          {formatDate(item.date) && (
+            <Caption>{formatDate(item.date)}</Caption>
+          )}
         </View>
 
         {/* Title */}

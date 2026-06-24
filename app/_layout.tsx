@@ -10,8 +10,10 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { View } from 'react-native';
 import 'react-native-reanimated';
 
+import { ChatFAB } from '@/components/ui/ChatFAB';
 import { FinanceTheme } from '@/constants/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -55,25 +57,40 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={PlutosDark}>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          animationDuration: 250,
-          contentStyle: { backgroundColor: FinanceTheme.background },
-        }}
-      >
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="stock/[symbol]"
-          options={{
+      <View style={{ flex: 1 }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
             animation: 'slide_from_right',
+            animationDuration: 250,
+            contentStyle: { backgroundColor: FinanceTheme.background },
           }}
-        />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
+        >
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="stock/[symbol]"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="chat"
+            options={{
+              animation: 'slide_from_bottom',
+            }}
+          />
+          <Stack.Screen
+            name="list/[id]"
+            options={{
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        </Stack>
+        <ChatFAB />
+      </View>
       <StatusBar style="light" />
     </ThemeProvider>
   );

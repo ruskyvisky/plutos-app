@@ -2,6 +2,8 @@
  * Plutos — Hisse Detay Sayfası
  * Mum grafiği, metrik kartlar, haberler, favori özelliği
  */
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -16,8 +18,6 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import Svg, {
   Defs,
   Line,
@@ -25,23 +25,22 @@ import Svg, {
   Path,
   Rect,
   Stop,
-  Text as SvgText,
-  Circle,
+  Text as SvgText
 } from 'react-native-svg';
 
 import { Card } from '@/components/ui/Card';
 import { DataSourceFooter } from '@/components/ui/DataSourceFooter';
 import { SkeletonStockDetail } from '@/components/ui/SkeletonLoader';
-import { H1, H3, Body, Caption, Typography } from '@/components/ui/Typography';
+import { Body, Caption, H1, H3, Typography } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Radii, Spacing } from '@/constants/theme';
+import type { CandleData, OHLCVWithChange, Stock, StockNewsItem } from '@/services/api';
 import {
-  fetchStockDetail,
   fetchOHLCVWithChange,
+  fetchStockDetail,
   fetchStockNews,
 } from '@/services/api';
-import type { Stock, OHLCVWithChange, CandleData, StockNewsItem } from '@/services/api';
-import { formatCurrency, formatLargeNumber, formatPercent } from '@/services/mockData';
 import { isFavorite, toggleFavorite } from '@/services/favorites';
+import { formatCurrency, formatLargeNumber, formatPercent } from '@/services/mockData';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const H_PADDING = 20;
@@ -302,7 +301,7 @@ export default function StockDetailScreen() {
     candles: [], closes: [], periodChangePercent: 0, dates: [],
   });
   const [news, setNews] = useState<StockNewsItem[]>([]);
-  const [timeframe, setTimeframe] = useState<Timeframe>('1A');
+  const [timeframe, setTimeframe] = useState<Timeframe>('1G');
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
   const [favorite, setFavorite] = useState(false);
@@ -329,7 +328,7 @@ export default function StockDetailScreen() {
     setLoading(true);
     const [stockRes, ohlcvRes, newsRes, favRes] = await Promise.all([
       fetchStockDetail(symbol),
-      fetchOHLCVWithChange(symbol, '1A'),
+      fetchOHLCVWithChange(symbol, '1G'),
       fetchStockNews(symbol, 8),
       isFavorite(symbol),
     ]);

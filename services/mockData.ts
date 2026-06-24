@@ -36,6 +36,7 @@ export interface Stock {
   fiftyTwoWeekLow?: number;      // 52 haftalık düşük
   upperLimit?: number;           // Günlük tavan fiyat (%+10)
   lowerLimit?: number;           // Günlük taban fiyat (%-10)
+  logoUrl?: string;              // Şirket logo URL
 }
 
 export interface IndexData {
@@ -304,68 +305,7 @@ export const MOCK_INDICES: IndexData[] = [
   { name: 'Gram Altın', value: 3_245.00, change: 0.95, changeAmount: 30.50 },
 ];
 
-// ─── Haberler ────────────────────────────────────────────────
-export const MOCK_NEWS: NewsItem[] = [
-  {
-    id: '1',
-    title: 'BIST 100 Endeksi Güne Yükselişle Başladı',
-    summary: 'Borsa İstanbul\'da BIST 100 endeksi, güne yüzde 1.4 yükselişle 10.245 puandan başladı. Bankacılık sektörü pozitif ayrıştı.',
-    source: 'Borsa İstanbul',
-    date: '2026-03-14T10:30:00',
-    category: 'piyasa',
-  },
-  {
-    id: '2',
-    title: 'THYAO: 2025 Yılı Kâr Rakamları Açıklandı',
-    summary: 'Türk Hava Yolları, 2025 yılında 78.3 milyar TL net kâr açıkladı. Şirket, yolcu sayısını 83.4 milyona çıkardı.',
-    source: 'KAP',
-    date: '2026-03-14T09:15:00',
-    symbol: 'THYAO',
-    category: 'kap',
-  },
-  {
-    id: '3',
-    title: 'Merkez Bankası Faiz Kararı Beklentileri',
-    summary: 'Yatırımcılar, Merkez Bankası\'nın bu haftaki toplantısında 250 baz puan indirim yapmasını bekliyor.',
-    source: 'Ekonomi Haberleri',
-    date: '2026-03-14T08:00:00',
-    category: 'gundem',
-  },
-  {
-    id: '4',
-    title: 'Aselsan\'dan Yeni Savunma İhracatı Anlaşması',
-    summary: 'Aselsan, Güneydoğu Asya ülkesiyle 1.2 milyar dolarlık savunma ihracatı anlaşması imzaladı.',
-    source: 'KAP',
-    date: '2026-03-13T16:45:00',
-    symbol: 'ASELS',
-    category: 'kap',
-  },
-  {
-    id: '5',
-    title: 'Bankacılık Sektörü Analiz Raporu',
-    summary: 'Yatırım bankalarının ortak görüşüne göre bankacılık sektörünün 2026 yılında yüzde 15-20 aralığında getiri sağlaması bekleniyor.',
-    source: 'Uzman Analiz',
-    date: '2026-03-13T14:30:00',
-    category: 'analiz',
-  },
-  {
-    id: '6',
-    title: 'Ereğli Demir Çelik Temettü Dağıtım Kararı',
-    summary: 'Ereğli Demir Çelik yönetim kurulu, hisse başına 3.85 TL brüt temettü dağıtılmasını ve dağıtım tarihinin Nisan ortası olarak belirlenmesini kararlaştırdı.',
-    source: 'KAP',
-    date: '2026-03-13T11:20:00',
-    symbol: 'EREGL',
-    category: 'kap',
-  },
-  {
-    id: '7',
-    title: 'Döviz Piyasasında Son Durum',
-    summary: 'Dolar/TL kuru 38.42 seviyesinde işlem görürken, sıkı para politikasının devamı beklentisi TL\'yi destekliyor.',
-    source: 'Forex Haberleri',
-    date: '2026-03-13T09:00:00',
-    category: 'piyasa',
-  },
-];
+
 
 // ─── Portföy Verisi ──────────────────────────────────────────
 export const MOCK_PORTFOLIO: PortfolioData = {
@@ -438,9 +378,23 @@ export function formatCurrency(value: number): string {
 }
 
 export function formatLargeNumber(value: number): string {
+  if (value >= 1_000_000_000_000) return (value / 1_000_000_000_000).toFixed(1) + 'T';
+  if (value >= 1_000_000_000) return (value / 1_000_000_000).toFixed(1) + 'B';
   if (value >= 1_000_000) return (value / 1_000_000).toFixed(1) + 'M';
   if (value >= 1_000) return (value / 1_000).toFixed(1) + 'K';
   return value.toString();
+}
+
+/**
+ * Endeks/parite değerini kısaltarak göster.
+ * Büyük sayılar için B/T, küçük değerler için ondalıklı.
+ */
+export function formatCompactValue(value: number): string {
+  if (value >= 1_000_000_000) return (value / 1_000_000_000).toFixed(2) + 'B';
+  if (value >= 1_000_000) return (value / 1_000_000).toFixed(2) + 'M';
+  if (value >= 10_000) return value.toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+  if (value >= 1_000) return value.toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+  return value.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function formatPercent(value: number): string {

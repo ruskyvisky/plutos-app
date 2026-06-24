@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,9 +27,19 @@ export function StockRow({ stock, onPress }: StockRowProps) {
       {/* Sol: Sembol & İsim */}
       <View style={styles.left}>
         <View style={styles.symbolBadge}>
-          <Typography variant="caption" style={styles.symbolText}>
-            {stock.symbol.slice(0, 2)}
-          </Typography>
+          {stock.logoUrl ? (
+            <Image
+              source={{ uri: stock.logoUrl }}
+              style={styles.logo}
+              contentFit="contain"
+              // Logo yüklenemezse sembol baş harflerine fallback
+              onError={() => {}}
+            />
+          ) : (
+            <Typography variant="caption" style={styles.symbolText}>
+              {stock.symbol.slice(0, 2)}
+            </Typography>
+          )}
         </View>
         <View style={styles.nameBlock}>
           <Body style={styles.symbol}>{stock.symbol}</Body>
@@ -79,6 +90,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: Spacing.md,
+    overflow: 'hidden',
+  },
+  logo: {
+    width: 30,
+    height: 30,
+    borderRadius: 6,
   },
   symbolText: {
     fontFamily: Fonts.bold,

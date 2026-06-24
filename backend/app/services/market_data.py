@@ -7,6 +7,14 @@ import borsapy as bp
 logger = logging.getLogger(__name__)
 
 class MarketDataService:
+    # Döviz/kripto sembollerini ve görünen isimlerini eşleştir
+    EXTRA_SYMBOLS = {
+        "DOLAR": {"yf": "TRY=X",    "label": "Dolar/TL"},
+        "EURO":  {"yf": "EURTRY=X", "label": "Euro/TL"},
+        "ALTIN": {"yf": "GC=F",     "label": "Gram Altın"},
+        "BTC":   {"yf": "BTC-USD",  "label": "Bitcoin"},
+    }
+
     def __init__(self):
         # Major indices for reference
         self.indices_symbols = ["XU100", "XU030"]
@@ -21,7 +29,7 @@ class MarketDataService:
 
     def get_indices(self) -> List[Dict[str, Any]]:
         """
-        BIST100, BIST30 canlı endeks verisi.
+        BIST100, BIST30 canlı endeks verisi + Döviz/Kripto pariteleri.
         """
         results = []
         for sym in self.indices_symbols:
@@ -37,7 +45,30 @@ class MarketDataService:
             except Exception as e:
                 logger.error(f"Error fetching index {sym}: {e}")
                 results.append({"index_name": sym, "value": 0.0, "change_percentage": 0.0})
+
+        # Döviz & Kripto pariteleri — yfinance üzerinden
+        try:
+            import yfinance as yf
+            for key, meta in self.EXTRA_SYMBOLS.items():
+                try:
+                    yf_ticker = yf.Ticker(meta["yf"])
+                    info = yf_ticker.fast_info
+                    price = getattr(info, "last_price", None) or getattr(info, "regularMarketPrice", 0.0)
+                    prev  = getattr(info, "previous_close", None) or price
+                    change_pct = ((price - prev) / prev * 100) if prev else 0.0
+                    results.append({
+                        "index_name": meta["label"],
+                        "value": float(price or 0.0),
+                        "change_percentage": float(change_pct or 0.0),
+                    })
+                except Exception as inner_e:
+                    logger.error(f"Error fetching extra symbol {key}: {inner_e}")
+                    results.append({"index_name": meta["label"], "value": 0.0, "change_percentage": 0.0})
+        except ImportError:
+            logger.warning("yfinance not installed; skipping currency/crypto indices.")
+
         return results
+
 
     def get_market_overview(self, stock_list: List[str] = None) -> Dict[str, Any]:
         """
@@ -269,13 +300,28 @@ class MarketDataService:
                 metrics["upper_limit"] = round(prev * 1.10, 2)
                 metrics["lower_limit"] = round(prev * 0.90, 2)
             
+            # Logo URL — borsapy/yfinance'den veya clearbit üzerinden
+            logo_url = (
+                info.get("logo_url") or
+                info.get("logoUrl") or
+                None
+            )
+            # Clearbit fallback (domain üzerinden)
+            website = info.get("website") or ""
+            if not logo_url and website:
+                from urllib.parse import urlparse
+                domain = urlparse(website).netloc.replace("www.", "")
+                if domain:
+                    logo_url = f"https://logo.clearbit.com/{domain}"
+
             profile = {
                 "symbol": symbol,
                 "name": info.get("longName") or info.get("name"),
                 "sector": info.get("sector"),
                 "industry": info.get("industry"),
-                "website": info.get("website"),
+                "website": website,
                 "description": info.get("longBusinessSummary"),
+                "logo_url": logo_url,
                 "metrics": metrics,
                 "dividends": self.get_dividends(symbol)
             }

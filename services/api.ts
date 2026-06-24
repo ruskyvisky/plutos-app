@@ -98,6 +98,7 @@ interface BackendCompanyProfile {
     lower_limit?: number;
   };
   dividends: { date: string; dividend: number }[];
+  logo_url?: string;
 }
 
 interface BackendNewsItem {
@@ -246,6 +247,7 @@ export async function fetchStockDetail(symbol: string): Promise<Stock | null> {
       fiftyTwoWeekLow: m?.fifty_two_week_low ?? undefined,
       upperLimit: m?.upper_limit ?? undefined,
       lowerLimit: m?.lower_limit ?? undefined,
+      logoUrl: profile.logo_url ?? undefined,
     };
   } catch (e) {
     console.error('fetchStockDetail error:', e);

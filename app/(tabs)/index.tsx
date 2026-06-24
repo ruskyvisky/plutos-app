@@ -1,6 +1,7 @@
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  FlatList,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -8,25 +9,22 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
 
 import { IndexWidget } from '@/components/market/IndexWidget';
-import { FavoriteWidget } from '@/components/market/FavoriteWidget';
-import { PortfolioSummaryCard } from '@/components/market/PortfolioSummaryCard';
+import { ListsWidget } from '@/components/market/ListsWidget';
 import { StockRow } from '@/components/market/StockRow';
 import { DataSourceFooter } from '@/components/ui/DataSourceFooter';
 import { SkeletonCard, SkeletonRow } from '@/components/ui/SkeletonLoader';
-import { H2, Body, Caption } from '@/components/ui/Typography';
+import { Body, Caption, H2 } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Spacing } from '@/constants/theme';
+import type { IndexData, Stock } from '@/services/api';
 import {
   fetchIndices,
-  fetchPortfolio,
   fetchTopGainers,
   fetchTopLosers,
   fetchTopVolume,
 } from '@/services/api';
-import type { IndexData, PortfolioData, Stock } from '@/services/api';
+import { updatePopularList } from '@/services/listsService';
 
 type TabKey = 'gainers' | 'losers' | 'volume';
 
@@ -41,35 +39,41 @@ export default function MarketScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [indices, setIndices] = useState<IndexData[]>([]);
-  const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('gainers');
   const [stockData, setStockData] = useState<Record<TabKey, Stock[]>>({
     gainers: [],
     losers: [],
     volume: [],
   });
-  // Favori bölümünü yenilemek için focus trigger
-  const [favTrigger, setFavTrigger] = useState(0);
+  const [listRefreshTrigger, setListRefreshTrigger] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
-      setFavTrigger((n) => n + 1);
+      setListRefreshTrigger((n) => n + 1);
     }, [])
   );
 
   const loadData = useCallback(async () => {
     try {
-      const [indicesRes, portfolioRes, gainersRes, losersRes, volumeRes] =
-        await Promise.all([
-          fetchIndices(),
-          fetchPortfolio(),
-          fetchTopGainers(),
-          fetchTopLosers(),
-          fetchTopVolume(),
-        ]);
+      const [indicesRes, gainersRes, losersRes, volumeRes] = await Promise.all([
+        fetchIndices(),
+        fetchTopGainers(),
+        fetchTopLosers(),
+        fetchTopVolume(),
+      ]);
       setIndices(indicesRes);
-      setPortfolio(portfolioRes);
       setStockData({ gainers: gainersRes, losers: losersRes, volume: volumeRes });
+
+      // "En Popüler" sistem listesini güncelle (hacim bazlı + yükselenler)
+      const popularSymbols = [
+        ...new Set([
+          ...volumeRes.slice(0, 5).map(s => s.symbol),
+          ...gainersRes.slice(0, 5).map(s => s.symbol),
+        ]),
+      ].slice(0, 10);
+      await updatePopularList(popularSymbols);
+      // Liste güncellenince widget'ı tetikle
+      setListRefreshTrigger((n) => n + 1);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -122,33 +126,25 @@ export default function MarketScreen() {
           />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <H2>Piyasa Özeti</H2>
-          <Caption>Canlı veriler</Caption>
+        {/* Sayfa Başlığı */}
+        <View style={styles.pageHeader}>
+          <H2 style={styles.pageTitle}>Piyasa</H2>
+          <Caption style={styles.pageSubtitle}>
+            {new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </Caption>
         </View>
 
-        {/* Portföy Özet */}
-        {portfolio && (
-          <PortfolioSummaryCard
-            totalBalance={portfolio.totalBalance}
-            dailyPL={portfolio.dailyPL}
-            dailyPLPercent={portfolio.dailyPLPercent}
-            onPress={() => router.push('/(tabs)/portfolio' as any)}
-          />
-        )}
-
-        {/* Favori Hisseler */}
-        <View style={styles.sectionHeader}>
-          <Caption style={styles.sectionLabel}>FAVORİ HİSSELER</Caption>
-        </View>
-        <FavoriteWidget refreshTrigger={favTrigger} />
-
-        {/* Endeksler — yatay scroll */}
+        {/* Endeksler & Döviz — yatay scroll */}
         <View style={styles.sectionHeader}>
           <Caption style={styles.sectionLabel}>ENDEKSLER & DÖVİZ</Caption>
         </View>
         <IndexWidget data={indices} />
+
+        {/* Listeler */}
+        <View style={styles.sectionHeader}>
+          <Caption style={styles.sectionLabel}>LİSTELER</Caption>
+        </View>
+        <ListsWidget refreshTrigger={listRefreshTrigger} />
 
         {/* Hisse Listeleri — Sekmeli */}
         <View style={styles.tabContainer}>
@@ -194,13 +190,20 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
     paddingTop: 60,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
+  pageHeader: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.xxl,
-    paddingBottom: Spacing.lg,
+    paddingBottom: Spacing.sm,
+  },
+  pageTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: 28,
+    letterSpacing: -0.5,
+  },
+  pageSubtitle: {
+    color: FinanceTheme.textMuted,
+    fontSize: 12,
+    marginTop: 2,
   },
   sectionHeader: {
     paddingHorizontal: Spacing.xl,
