@@ -36,13 +36,14 @@ import { FinanceTheme, Fonts, Radii, Spacing } from '@/constants/theme';
 import type { CandleData, OHLCVWithChange, Stock, StockNewsItem } from '@/services/api';
 import {
   fetchOHLCVWithChange,
+  fetchPortfolio,
   fetchStockDetail,
   fetchStockNews,
 } from '@/services/api';
-import { isFavorite, toggleFavorite } from '@/services/favorites';
 import { formatLargeNumber, formatPercent } from '@/services/mockData';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { getLists, addToList, removeFromList, type StockList } from '@/services/listsService';
+import { TradeBottomSheet } from '@/components/market/TradeBottomSheet';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const H_PADDING = 20;
@@ -208,13 +209,13 @@ function CandlestickChart({
                 stroke={color} strokeWidth="1"
                 opacity={isDimmed ? 0.3 : 1}
               />
-              {/* Body */}
+              {/* Body — both green and red candles are filled */}
               <Rect
                 x={cx - halfW} y={bodyTop}
                 width={candleW} height={bodyH}
-                fill={isGreen ? color : 'none'}
+                fill={color}
                 stroke={color}
-                strokeWidth={isGreen ? 0 : 1}
+                strokeWidth={1}
                 opacity={isDimmed ? 0.3 : 1}
                 rx={1}
               />
@@ -310,7 +311,10 @@ export default function StockDetailScreen() {
   const [timeframe, setTimeframe] = useState<Timeframe>('1G');
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
-  const [favorite, setFavorite] = useState(false);
+  const [cashBalance, setCashBalance] = useState(0);
+  // Trade modal
+  const [tradeVisible, setTradeVisible] = useState(false);
+  const [tradeSide, setTradeSide] = useState<'buy' | 'sell'>('buy');
 
   // Lists modal states
   const [showListModal, setShowListModal] = useState(false);
@@ -357,16 +361,16 @@ export default function StockDetailScreen() {
   const loadAll = useCallback(async () => {
     if (!symbol) return;
     setLoading(true);
-    const [stockRes, ohlcvRes, newsRes, favRes] = await Promise.all([
+    const [stockRes, ohlcvRes, newsRes, portfolioRes] = await Promise.all([
       fetchStockDetail(symbol),
       fetchOHLCVWithChange(symbol, '1G'),
       fetchStockNews(symbol, 8),
-      isFavorite(symbol),
+      fetchPortfolio(),
     ]);
     setStock(stockRes);
     setOhlcv(ohlcvRes);
     setNews(newsRes);
-    setFavorite(favRes);
+    setCashBalance(portfolioRes.cash);
     setLoading(false);
   }, [symbol]);
 
@@ -381,12 +385,9 @@ export default function StockDetailScreen() {
     setChartLoading(false);
   }, [symbol]);
 
-  // Favorite toggle
-  const handleFavorite = async () => {
-    if (!symbol) return;
-    const newState = await toggleFavorite(symbol as string);
-    setFavorite(newState);
-  };
+  // Trade handlers
+  const openBuy = () => { setTradeSide('buy'); setTradeVisible(true); };
+  const openSell = () => { setTradeSide('sell'); setTradeVisible(true); };
 
   // ── Loading state ──
   if (loading) {
@@ -400,7 +401,7 @@ export default function StockDetailScreen() {
           <View style={styles.headerCenter}>
             <H3>{symbol}</H3>
           </View>
-          <View style={styles.favoriteButton} />
+          <View style={{ width: 36 }} />
         </View>
         <ScrollView showsVerticalScrollIndicator={false}>
           <SkeletonStockDetail />
@@ -417,7 +418,7 @@ export default function StockDetailScreen() {
             <Ionicons name="chevron-back" size={24} color={FinanceTheme.text} />
           </TouchableOpacity>
           <View style={styles.headerCenter}><H3>{symbol}</H3></View>
-          <View style={styles.favoriteButton} />
+          <View style={{ width: 36 }} />
         </View>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color={FinanceTheme.textMuted} />
@@ -561,15 +562,11 @@ export default function StockDetailScreen() {
           <Caption numberOfLines={1} style={styles.headerSub}>{stock.name}</Caption>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.listIconButton} onPress={() => setShowListModal(true)}>
-            <Ionicons name="list-outline" size={22} color={FinanceTheme.text} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.favoriteButton} onPress={handleFavorite}>
-            <Ionicons
-              name={favorite ? 'star' : 'star-outline'}
-              size={22}
-              color={favorite ? '#F59E0B' : FinanceTheme.textMuted}
-            />
+          <TouchableOpacity
+            style={styles.compareTextButton}
+            onPress={() => router.push(`/stock/compare?a=${stock.symbol}` as any)}
+          >
+            <Typography variant="bodySmall" style={styles.compareTextButtonText}>Karşılaştır</Typography>
           </TouchableOpacity>
         </View>
       </View>
@@ -723,8 +720,28 @@ export default function StockDetailScreen() {
         )}
 
         <DataSourceFooter />
-        <View style={{ height: 24 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* ─── Al / Sat Bar ─── */}
+      <View style={styles.tradeBar}>
+        <TouchableOpacity
+          style={[styles.tradeBtn, styles.sellBtn]}
+          onPress={openSell}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="trending-down" size={18} color="#fff" />
+          <Body style={styles.tradeBtnText}>Sat</Body>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tradeBtn, styles.buyBtn]}
+          onPress={openBuy}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="trending-up" size={18} color="#fff" />
+          <Body style={styles.tradeBtnText}>Al</Body>
+        </TouchableOpacity>
+      </View>
 
       {/* ─── Info Modal ─── */}
       {infoModal && (
@@ -819,6 +836,19 @@ export default function StockDetailScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* ─── Trade Bottom Sheet ─── */}
+      {stock && (
+        <TradeBottomSheet
+          visible={tradeVisible}
+          onClose={() => { setTradeVisible(false); loadAll(); }}
+          symbol={stock.symbol}
+          stockName={stock.name}
+          currentPrice={stock.price}
+          cashBalance={cashBalance}
+          side={tradeSide}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -903,7 +933,18 @@ const styles = StyleSheet.create({
   backButton: { padding: 4, width: 36 },
   headerCenter: { alignItems: 'center', flex: 1 },
   headerSub: { color: FinanceTheme.textMuted, marginTop: 1 },
-  favoriteButton: { padding: 4, width: 36, alignItems: 'flex-end' },
+  compareTextButton: {
+    backgroundColor: FinanceTheme.primary + '1A',
+    borderColor: FinanceTheme.primary,
+    borderWidth: 1,
+    borderRadius: Radii.full,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  compareTextButtonText: {
+    color: FinanceTheme.primary,
+    fontFamily: Fonts.medium,
+  },
 
   // Price
   priceSection: { alignItems: 'center', paddingTop: Spacing.xl, paddingBottom: Spacing.sm },
@@ -1100,5 +1141,36 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: FinanceTheme.textMuted,
     paddingVertical: 24,
+  },
+
+  // ─── Trade Bar ───
+  tradeBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0, right: 0,
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 12,
+    paddingBottom: 28,
+    backgroundColor: FinanceTheme.tabBar,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: FinanceTheme.divider,
+    gap: 12,
+  },
+  tradeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: Radii.xl,
+    gap: 8,
+  },
+  buyBtn: { backgroundColor: FinanceTheme.profit },
+  sellBtn: { backgroundColor: FinanceTheme.loss },
+  tradeBtnText: {
+    color: '#FFFFFF',
+    fontFamily: Fonts.bold,
+    fontSize: 16,
   },
 });

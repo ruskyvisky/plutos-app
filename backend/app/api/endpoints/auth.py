@@ -5,7 +5,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.security import create_access_token
 from app.models.user import User
-from app.schemas.auth import Token, UserCreate, UserResponse
+from app.schemas.auth import OnboardingRequest, Token, UserCreate, UserResponse
 from app.services.user_service import authenticate_user, create_user
 
 router = APIRouter()
@@ -61,4 +61,38 @@ def login(user_data: UserCreate, db: Session = Depends(get_db)):
 )
 def get_me(current_user: User = Depends(get_current_user)):
     """Token'dan kullanıcı bilgisini döner."""
+    return current_user
+
+
+@router.post(
+    "/onboarding",
+    response_model=UserResponse,
+    summary="Onboarding yatırımcı kimliği kaydet",
+)
+def save_onboarding(
+    body: OnboardingRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    4 soruluk onboarding testinin cevaplarını (0=A, 1=B, 2=C) alır,
+    profil belirler ve kullanıcıya kaydeder.
+    A çoğunlukla -> BUFFETT
+    B çoğunlukla -> LYNCH
+    C çoğunlukla -> WOOD
+    """
+    counts = [0, 0, 0]  # A, B, C
+    for ans in body.answers:
+        if 0 <= ans <= 2:
+            counts[ans] += 1
+
+    max_count = max(counts)
+    profile_map = ["BUFFETT", "LYNCH", "WOOD"]
+    # Eşitlik durumunda ilk en yüksek seçilir
+    profile = profile_map[counts.index(max_count)]
+
+    current_user.investor_profile = profile
+    current_user.onboarding_done = True
+    db.commit()
+    db.refresh(current_user)
     return current_user

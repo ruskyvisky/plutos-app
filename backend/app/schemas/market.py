@@ -12,6 +12,9 @@ class CompanyShort(BaseModel):
     name: Optional[str] = None
     sector: Optional[str] = None
     city: Optional[str] = None
+    price: Optional[float] = None
+    change: Optional[float] = None
+    volume: Optional[float] = None
 
 class IndexData(BaseModel):
     index_name: str

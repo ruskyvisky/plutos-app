@@ -20,6 +20,8 @@ export interface AuthUser {
   full_name: string | null;
   is_active: boolean;
   created_at: string;
+  investor_profile?: string;
+  onboarding_done: boolean;
 }
 
 export interface AuthToken {
@@ -115,4 +117,24 @@ export async function getMeApi(): Promise<AuthUser | null> {
 
   if (!response.ok) return null;
   return response.json() as Promise<AuthUser>;
+}
+
+export async function saveOnboardingApi(answers: number[]): Promise<AuthUser> {
+  const token = await getToken();
+  const response = await fetch(`${BASE_URL}/auth/onboarding`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ answers }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.detail ?? 'Onboarding kaydedilemedi.');
+  }
+
+  await saveUser(data);
+  return data as AuthUser;
 }

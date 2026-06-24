@@ -38,14 +38,34 @@ export default function ListDetailScreen() {
     setList(found);
 
     if (found && found.symbols.length > 0) {
-      const results = await Promise.all(
-        found.symbols.map(s => fetchStockDetail(s).catch(() => null))
-      );
-      setStocks(results.filter(Boolean) as Stock[]);
+      setStocks([]);
+      let loadedCount = 0;
+      found.symbols.forEach(async (symbol) => {
+        try {
+          const detail = await fetchStockDetail(symbol);
+          if (detail) {
+            setStocks((prev) => {
+              if (prev.some((p) => p.symbol === detail.symbol)) return prev;
+              const newStocks = [...prev, detail];
+              return newStocks.sort(
+                (a, b) => found.symbols.indexOf(a.symbol) - found.symbols.indexOf(b.symbol)
+              );
+            });
+            setLoading(false);
+          }
+        } catch (e) {
+          console.error(`Failed to load ${symbol}:`, e);
+        } finally {
+          loadedCount++;
+          if (loadedCount === found.symbols.length) {
+            setLoading(false);
+          }
+        }
+      });
     } else {
       setStocks([]);
+      setLoading(false);
     }
-    setLoading(false);
   }, [id]);
 
   useEffect(() => {

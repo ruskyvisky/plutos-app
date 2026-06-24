@@ -1,6 +1,6 @@
 import GoogleIcon from '@/components/icons/GoogleIcon';
 import { FinanceTheme, Fonts } from '@/constants/theme';
-import { loginApi } from '@/services/authService';
+import { loginApi, getUser, getToken } from '@/services/authService';
 import { Ionicons } from '@expo/vector-icons';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -94,6 +94,25 @@ export default function LoginScreen() {
     const [isLoading, setIsLoading] = useState(false);
     const [apiError, setApiError] = useState<string | null>(null);
 
+    React.useEffect(() => {
+        const checkAutoLogin = async () => {
+            try {
+                const user = await getUser();
+                const token = await getToken();
+                if (user && token) {
+                    if (user.onboarding_done) {
+                        router.replace('/(tabs)');
+                    } else {
+                        router.replace('/onboarding');
+                    }
+                }
+            } catch (e) {
+                console.error('Auto login check failed:', e);
+            }
+        };
+        checkAutoLogin();
+    }, []);
+
     const {
         control,
         handleSubmit,
@@ -110,8 +129,12 @@ export default function LoginScreen() {
         setIsLoading(true);
         setApiError(null);
         try {
-            await loginApi({ email: data.email, password: data.password });
-            router.replace('/(tabs)');
+            const res = await loginApi({ email: data.email, password: data.password });
+            if (res.user.onboarding_done) {
+                router.replace('/(tabs)');
+            } else {
+                router.replace('/onboarding');
+            }
         } catch (error: any) {
             const msg = error?.message ?? 'Giriş sırasında bir hata oluştu.';
             setApiError(msg);

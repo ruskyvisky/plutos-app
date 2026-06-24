@@ -369,7 +369,7 @@ class MarketDataService:
             if day_low is not None:
                 day_low /= divisor
 
-            prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose") or info.get("prev_close")
             if prev_close is not None:
                 prev_close /= divisor
 

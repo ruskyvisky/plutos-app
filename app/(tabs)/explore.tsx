@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -12,6 +12,7 @@ import {
 import { Card } from '@/components/ui/Card';
 import { Body, Caption, H2, H3 } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Radii, Spacing } from '@/constants/theme';
+import { getUser, getMeApi, logout, type AuthUser } from '@/services/authService';
 
 const MENU_ITEMS = [
   { icon: 'person-outline', label: 'Hesap Bilgileri', sub: 'Ad, e-posta, şifre' },
@@ -24,6 +25,24 @@ const MENU_ITEMS = [
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const [user, setUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const u = await getUser();
+      setUser(u);
+      const remote = await getMeApi();
+      if (remote) {
+        setUser(remote);
+      }
+    };
+    loadUser();
+  }, []);
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/login');
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -40,12 +59,63 @@ export default function ProfileScreen() {
               <Ionicons name="person" size={48} color={FinanceTheme.primary} />
             </View>
           </View>
-          <H3 style={styles.userName}>Kullanıcı</H3>
-          <Caption style={styles.userEmail}>kullanici@ornek.com</Caption>
-          <TouchableOpacity style={styles.editBadge} activeOpacity={0.7}>
-            <Ionicons name="create-outline" size={13} color={FinanceTheme.primary} />
-            <Caption style={styles.editText}>Düzenle</Caption>
-          </TouchableOpacity>
+          <H3 style={styles.userName}>{user?.full_name || 'Kullanıcı'}</H3>
+          <Caption style={styles.userEmail}>{user?.email || 'kullanici@ornek.com'}</Caption>
+
+          {user?.investor_profile && (
+            <View style={styles.profileBadgeContainer}>
+              <View style={[
+                styles.profileBadge,
+                {
+                  backgroundColor: 
+                    user.investor_profile === 'BUFFETT' ? 'rgba(16,185,129,0.15)' :
+                    user.investor_profile === 'LYNCH' ? 'rgba(56,189,248,0.15)' :
+                    'rgba(239,68,68,0.15)',
+                  borderColor:
+                    user.investor_profile === 'BUFFETT' ? '#10B981' :
+                    user.investor_profile === 'LYNCH' ? '#38BDF8' :
+                    '#EF4444',
+                }
+              ]}>
+                <Ionicons 
+                  name={
+                    user.investor_profile === 'BUFFETT' ? 'leaf-outline' :
+                    user.investor_profile === 'LYNCH' ? 'people-outline' :
+                    'rocket-outline'
+                  } 
+                  size={13} 
+                  color={
+                    user.investor_profile === 'BUFFETT' ? '#10B981' :
+                    user.investor_profile === 'LYNCH' ? '#38BDF8' :
+                    '#EF4444'
+                  } 
+                />
+                <Caption style={[
+                  styles.profileBadgeText,
+                  {
+                    color: 
+                      user.investor_profile === 'BUFFETT' ? '#10B981' :
+                      user.investor_profile === 'LYNCH' ? '#38BDF8' :
+                      '#EF4444',
+                  }
+                ]}>
+                  {
+                    user.investor_profile === 'BUFFETT' ? 'Warren Buffett (Değer Yatırımcısı)' :
+                    user.investor_profile === 'LYNCH' ? 'Peter Lynch (Halkın Yatırımcısı)' :
+                    'Cathie Wood (İnovasyon Avcısı)'
+                  }
+                </Caption>
+              </View>
+              <TouchableOpacity 
+                style={styles.retakeBtn} 
+                onPress={() => router.push('/onboarding')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="refresh-outline" size={12} color={FinanceTheme.primary} />
+                <Caption style={styles.retakeText}>Yeniden Test Et</Caption>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* İstatistik kartları */}
@@ -83,7 +153,7 @@ export default function ProfileScreen() {
         <TouchableOpacity
           style={styles.logoutBtn}
           activeOpacity={0.7}
-          onPress={() => router.replace('/login' as any)}
+          onPress={handleLogout}
         >
           <Ionicons name="log-out-outline" size={18} color={FinanceTheme.loss} />
           <Body style={styles.logoutText}>Çıkış Yap</Body>
@@ -222,5 +292,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: FinanceTheme.textMuted,
     paddingBottom: Spacing.xl,
+  },
+  profileBadgeContainer: {
+    alignItems: 'center',
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  profileBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radii.full,
+    borderWidth: 1,
+  },
+  profileBadgeText: {
+    fontFamily: Fonts.bold,
+    fontSize: 12,
+  },
+  retakeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: FinanceTheme.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radii.full,
+    borderWidth: 1,
+    borderColor: FinanceTheme.cardBorder,
+  },
+  retakeText: {
+    color: FinanceTheme.primary,
+    fontFamily: Fonts.medium,
+    fontSize: 11,
   },
 });

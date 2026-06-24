@@ -17,6 +17,10 @@ class UserLogin(BaseModel):
     password: str
 
 
+class OnboardingRequest(BaseModel):
+    answers: list[int]   # [q1_choice, q2_choice, q3_choice, q4_choice] — 0=A, 1=B, 2=C
+
+
 # ─── Response Şemaları ────────────────────────────────────────
 
 class UserResponse(BaseModel):
@@ -25,6 +29,8 @@ class UserResponse(BaseModel):
     full_name: Optional[str] = None
     is_active: bool
     created_at: datetime
+    investor_profile: Optional[str] = None
+    onboarding_done: bool = False
 
     model_config = {"from_attributes": True}
 
