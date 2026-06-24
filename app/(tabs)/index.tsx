@@ -26,6 +26,8 @@ import {
 } from '@/services/api';
 import { updatePopularList } from '@/services/listsService';
 
+import { useCurrency } from '@/contexts/CurrencyContext';
+
 type TabKey = 'gainers' | 'losers' | 'volume';
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -36,6 +38,7 @@ const TABS: { key: TabKey; label: string }[] = [
 
 export default function MarketScreen() {
   const router = useRouter();
+  const { currency, setCurrency } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [indices, setIndices] = useState<IndexData[]>([]);
@@ -128,10 +131,35 @@ export default function MarketScreen() {
       >
         {/* Sayfa Başlığı */}
         <View style={styles.pageHeader}>
-          <H2 style={styles.pageTitle}>Piyasa</H2>
-          <Caption style={styles.pageSubtitle}>
-            {new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </Caption>
+          <View style={styles.headerRow}>
+            <View>
+              <H2 style={styles.pageTitle}>Piyasa</H2>
+              <Caption style={styles.pageSubtitle}>
+                {new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </Caption>
+            </View>
+            
+            <View style={styles.currencySelector}>
+              {(['TRY', 'USD', 'EUR'] as const).map((curr) => (
+                <TouchableOpacity
+                  key={curr}
+                  style={[
+                    styles.currencyPill,
+                    currency === curr && styles.currencyPillActive,
+                  ]}
+                  onPress={() => setCurrency(curr)}
+                  activeOpacity={0.7}
+                >
+                  <Body style={[
+                    styles.currencyPillText,
+                    currency === curr && styles.currencyPillTextActive
+                  ]}>
+                    {curr}
+                  </Body>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
         </View>
 
         {/* Endeksler & Döviz — yatay scroll */}
@@ -139,12 +167,6 @@ export default function MarketScreen() {
           <Caption style={styles.sectionLabel}>ENDEKSLER & DÖVİZ</Caption>
         </View>
         <IndexWidget data={indices} />
-
-        {/* Listeler */}
-        <View style={styles.sectionHeader}>
-          <Caption style={styles.sectionLabel}>LİSTELER</Caption>
-        </View>
-        <ListsWidget refreshTrigger={listRefreshTrigger} />
 
         {/* Hisse Listeleri — Sekmeli */}
         <View style={styles.tabContainer}>
@@ -174,6 +196,12 @@ export default function MarketScreen() {
         {activeStocks.map((stock) => (
           <StockRow key={stock.symbol} stock={stock} onPress={handleStockPress} />
         ))}
+
+        {/* Listeler (Yükselen/Düşen/Hacim Hisse Listelerinin Altına Alındı) */}
+        <View style={styles.sectionHeader}>
+          <Caption style={styles.sectionLabel}>LİSTELER</Caption>
+        </View>
+        <ListsWidget refreshTrigger={listRefreshTrigger} />
 
         <DataSourceFooter />
       </ScrollView>
@@ -240,6 +268,34 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   tabTextActive: {
+    color: '#FFFFFF',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  currencySelector: {
+    flexDirection: 'row',
+    backgroundColor: FinanceTheme.surface,
+    borderRadius: 16,
+    padding: 2,
+    gap: 2,
+  },
+  currencyPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  currencyPillActive: {
+    backgroundColor: FinanceTheme.primary,
+  },
+  currencyPillText: {
+    fontSize: 11,
+    fontFamily: Fonts.semiBold,
+    color: FinanceTheme.textSecondary,
+  },
+  currencyPillTextActive: {
     color: '#FFFFFF',
   },
 });

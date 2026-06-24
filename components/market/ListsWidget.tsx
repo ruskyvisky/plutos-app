@@ -101,19 +101,20 @@ export function ListsWidget({ refreshTrigger }: ListsWidgetProps) {
       ) : (
         <View style={styles.listContainer}>
           {lists.map(list => (
-            <TouchableOpacity
+            <View
               key={list.id}
               style={styles.listItem}
-              onPress={() => handleListPress(list)}
-              onLongPress={() => handleDelete(list)}
-              activeOpacity={0.7}
             >
-              {/* Sol: İkon + İsim */}
-              <View style={styles.listLeft}>
+              {/* Sol: İkon + İsim (Tıklanabilir Alan) */}
+              <TouchableOpacity
+                style={styles.listLeft}
+                onPress={() => handleListPress(list)}
+                activeOpacity={0.7}
+              >
                 <View style={styles.listIconWrap}>
                   <Caption style={styles.listIcon}>{list.icon ?? '📋'}</Caption>
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Body style={styles.listName}>{list.name}</Body>
                   <Caption style={styles.listCount}>
                     {list.symbols.length} enstrüman
@@ -122,11 +123,27 @@ export function ListsWidget({ refreshTrigger }: ListsWidgetProps) {
                     )}
                   </Caption>
                 </View>
-              </View>
+              </TouchableOpacity>
 
-              {/* Sağ: Ok */}
-              <Ionicons name="chevron-forward" size={16} color={FinanceTheme.textMuted} />
-            </TouchableOpacity>
+              {/* Sağ: Ok veya Silme Butonu */}
+              {list.isSystem ? (
+                <TouchableOpacity
+                  style={styles.rightAction}
+                  onPress={() => handleListPress(list)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-forward" size={16} color={FinanceTheme.textMuted} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.deleteBtnContainer}
+                  onPress={() => handleDelete(list)}
+                  activeOpacity={0.6}
+                >
+                  <Ionicons name="trash-outline" size={18} color={FinanceTheme.loss} />
+                </TouchableOpacity>
+              )}
+            </View>
           ))}
         </View>
       )}
@@ -240,6 +257,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: FinanceTheme.divider,
     justifyContent: 'space-between',
+  },
+  deleteBtnContainer: {
+    padding: Spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rightAction: {
+    padding: Spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   listLeft: {
     flexDirection: 'row',

@@ -5,7 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/Card';
 import { H1, Body, Caption } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Spacing } from '@/constants/theme';
-import { formatCurrency, formatPercent } from '@/services/mockData';
+import { formatPercent } from '@/services/mockData';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 interface PortfolioSummaryCardProps {
   totalBalance: number;
@@ -20,6 +21,7 @@ export function PortfolioSummaryCard({
   dailyPLPercent,
   onPress,
 }: PortfolioSummaryCardProps) {
+  const { formatPrice } = useCurrency();
   const isPositive = dailyPL >= 0;
   const plColor = isPositive ? FinanceTheme.profit : FinanceTheme.loss;
   const plBg = isPositive ? FinanceTheme.profitBg : FinanceTheme.lossBg;
@@ -31,7 +33,7 @@ export function PortfolioSummaryCard({
           <Caption>Portföy Değeri</Caption>
           <Ionicons name="chevron-forward" size={16} color={FinanceTheme.textMuted} />
         </View>
-        <H1 style={styles.balance}>{formatCurrency(totalBalance)}</H1>
+        <H1 style={styles.balance}>{formatPrice(totalBalance)}</H1>
         <View style={[styles.plBadge, { backgroundColor: plBg }]}>
           <Ionicons
             name={isPositive ? 'arrow-up' : 'arrow-down'}
@@ -42,7 +44,7 @@ export function PortfolioSummaryCard({
             style={[styles.plText, { color: plColor }]}
             numeric
           >
-            {formatCurrency(Math.abs(dailyPL))} ({formatPercent(dailyPLPercent)})
+            {formatPrice(Math.abs(dailyPL))} ({formatPercent(dailyPLPercent)})
           </Body>
           <Caption style={styles.plLabel}> bugün</Caption>
         </View>

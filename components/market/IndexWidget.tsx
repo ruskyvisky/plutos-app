@@ -7,6 +7,8 @@ import { FinanceTheme, Fonts, Spacing } from '@/constants/theme';
 import type { IndexData } from '@/services/api';
 import { formatCompactValue, formatPercent } from '@/services/mockData';
 
+import { useCurrency } from '@/contexts/CurrencyContext';
+
 interface IndexWidgetProps {
   data: IndexData[];
 }
@@ -36,9 +38,30 @@ export function IndexWidget({ data }: IndexWidgetProps) {
 }
 
 function IndexCard({ item }: { item: IndexData }) {
+  const { formatPrice } = useCurrency();
   const isPositive = item.change >= 0;
   const changeColor = isPositive ? FinanceTheme.profit : FinanceTheme.loss;
   const changeBg = isPositive ? FinanceTheme.profitBg : FinanceTheme.lossBg;
+
+  let formattedValue = '';
+  const nameLower = item.name.toLowerCase();
+  if (item.name === 'XU100' || item.name === 'XU030') {
+    formattedValue = item.value.toLocaleString('tr-TR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  } else if (nameLower.includes('dolar/tl') || nameLower.includes('euro/tl')) {
+    formattedValue = `₺${item.value.toLocaleString('tr-TR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    })}`;
+  } else if (nameLower.includes('gram altın')) {
+    formattedValue = formatPrice(item.value, 'GC=F');
+  } else if (nameLower.includes('bitcoin')) {
+    formattedValue = formatPrice(item.value, 'BTC-USD');
+  } else {
+    formattedValue = formatPrice(item.value);
+  }
 
   return (
     <Card variant="default" padding="sm" style={styles.card}>
@@ -52,7 +75,7 @@ function IndexCard({ item }: { item: IndexData }) {
 
       {/* Değer */}
       <H3 numeric style={styles.value}>
-        {formatCompactValue(item.value)}
+        {formattedValue}
       </H3>
 
       {/* Değişim Rozeti */}

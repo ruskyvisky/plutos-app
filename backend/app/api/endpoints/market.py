@@ -82,3 +82,17 @@ async def get_economic_calendar(period: str = Query("1w", description="1d, 1w, 2
     Türkiye ve ABD başta olmak üzere önemli ekonomik gelişmeleri ve takvimi döner.
     """
     return market_service.get_economic_calendar(period)
+
+@router.get("/crypto")
+async def get_crypto_list():
+    """
+    Kripto paraları cache'ten döner.
+    """
+    return market_cache.data.get("crypto", [])
+
+@router.get("/commodities")
+async def get_commodities_list():
+    """
+    Emtiaları cache'ten döner.
+    """
+    return market_cache.data.get("commodities", [])

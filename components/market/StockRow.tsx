@@ -6,7 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Body, Caption, Typography } from '@/components/ui/Typography';
 import { FinanceTheme, Fonts, Spacing } from '@/constants/theme';
 import type { Stock } from '@/services/api';
-import { formatCurrency, formatPercent } from '@/services/mockData';
+import { formatPercent } from '@/services/mockData';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 interface StockRowProps {
   stock: Stock;
@@ -14,6 +15,7 @@ interface StockRowProps {
 }
 
 export function StockRow({ stock, onPress }: StockRowProps) {
+  const { formatPrice } = useCurrency();
   const isPositive = stock.change >= 0;
   const changeColor = isPositive ? FinanceTheme.profit : FinanceTheme.loss;
   const changeBg = isPositive ? FinanceTheme.profitBg : FinanceTheme.lossBg;
@@ -50,7 +52,7 @@ export function StockRow({ stock, onPress }: StockRowProps) {
       {/* Sağ: Fiyat & Değişim */}
       <View style={styles.right}>
         <Typography variant="body" numeric style={styles.price}>
-          {formatCurrency(stock.price)}
+          {formatPrice(stock.price, stock.symbol)}
         </Typography>
         <View style={[styles.changeBadge, { backgroundColor: changeBg }]}>
           <Ionicons

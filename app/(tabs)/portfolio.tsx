@@ -21,10 +21,12 @@ import { H1, H2, H3, Body, Caption, Typography } from '@/components/ui/Typograph
 import { FinanceTheme, Fonts, Radii, Shadows, Spacing } from '@/constants/theme';
 import { fetchPortfolio, executeTrade } from '@/services/api';
 import type { Holding, PortfolioData } from '@/services/api';
-import { formatCurrency, formatPercent } from '@/services/mockData';
+import { formatPercent } from '@/services/mockData';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 export default function PortfolioScreen() {
   const router = useRouter();
+  const { formatPrice, currency, setCurrency } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [tradeModalVisible, setTradeModalVisible] = useState(false);
@@ -94,14 +96,38 @@ export default function PortfolioScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <H2>Sanal Portföy</H2>
-          <Caption style={styles.headerSubtitle}>Risksiz simülasyon</Caption>
+          <View style={styles.headerRow}>
+            <View>
+              <H2>Sanal Portföy</H2>
+              <Caption style={styles.headerSubtitle}>Risksiz simülasyon</Caption>
+            </View>
+            <View style={styles.currencySelector}>
+              {(['TRY', 'USD', 'EUR'] as const).map((curr) => (
+                <TouchableOpacity
+                  key={curr}
+                  style={[
+                    styles.currencyPill,
+                    currency === curr && styles.currencyPillActive,
+                  ]}
+                  onPress={() => setCurrency(curr)}
+                  activeOpacity={0.7}
+                >
+                  <Body style={[
+                    styles.currencyPillText,
+                    currency === curr && styles.currencyPillTextActive
+                  ]}>
+                    {curr}
+                  </Body>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
         </View>
 
         {/* Bakiye Kartı */}
         <Card variant="elevated" padding="lg" style={styles.balanceCard}>
           <Caption style={styles.balanceLabel}>TOPLAM DEĞERİ</Caption>
-          <H1 style={styles.balanceAmount}>{formatCurrency(portfolio.totalBalance)}</H1>
+          <H1 style={styles.balanceAmount}>{formatPrice(portfolio.totalBalance)}</H1>
 
           {/* Toplam Kâr/Zarar */}
           <View style={styles.plRow}>
@@ -129,7 +155,7 @@ export default function PortfolioScreen() {
                   marginLeft: 4,
                 }}
               >
-                {formatCurrency(Math.abs(portfolio.totalPL))} ({formatPercent(portfolio.totalPLPercent)})
+                {formatPrice(Math.abs(portfolio.totalPL))} ({formatPercent(portfolio.totalPLPercent)})
               </Typography>
             </View>
             <Caption> toplam</Caption>
@@ -161,7 +187,7 @@ export default function PortfolioScreen() {
                   marginLeft: 4,
                 }}
               >
-                {formatCurrency(Math.abs(portfolio.dailyPL))} ({formatPercent(portfolio.dailyPLPercent)})
+                {formatPrice(Math.abs(portfolio.dailyPL))} ({formatPercent(portfolio.dailyPLPercent)})
               </Typography>
             </View>
             <Caption> bugün</Caption>
@@ -171,7 +197,7 @@ export default function PortfolioScreen() {
           <View style={styles.cashRow}>
             <Caption>Nakit Bakiye</Caption>
             <Typography variant="body" numeric style={{ fontFamily: Fonts.semiBold }}>
-              {formatCurrency(portfolio.cash)}
+              {formatPrice(portfolio.cash)}
             </Typography>
           </View>
         </Card>
@@ -238,7 +264,7 @@ export default function PortfolioScreen() {
               </H3>
 
               <Body style={styles.sheetPrice}>
-                Güncel Fiyat: {formatCurrency(selectedHolding?.currentPrice ?? 0)}
+                Güncel Fiyat: {formatPrice(selectedHolding?.currentPrice ?? 0, selectedHolding?.symbol)}
               </Body>
 
               {/* Miktar Input */}
@@ -260,8 +286,9 @@ export default function PortfolioScreen() {
                 <View style={styles.totalRow}>
                   <Body style={{ color: FinanceTheme.textSecondary }}>Toplam Tutar</Body>
                   <H3 numeric>
-                    {formatCurrency(
-                      parseInt(tradeQuantity, 10) * (selectedHolding?.currentPrice ?? 0)
+                    {formatPrice(
+                      parseInt(tradeQuantity, 10) * (selectedHolding?.currentPrice ?? 0),
+                      selectedHolding?.symbol
                     )}
                   </H3>
                 </View>
@@ -308,6 +335,7 @@ function HoldingRow({
   onSell: () => void;
   onPress: () => void;
 }) {
+  const { formatPrice } = useCurrency();
   const pl = (holding.currentPrice - holding.avgCost) * holding.quantity;
   const plPercent = ((holding.currentPrice - holding.avgCost) / holding.avgCost) * 100;
   const isPositive = pl >= 0;
@@ -323,16 +351,16 @@ function HoldingRow({
         </View>
         <View style={styles.holdingInfo}>
           <Body style={{ fontFamily: Fonts.semiBold, fontSize: 15 }}>{holding.symbol}</Body>
-          <Caption>{holding.quantity} adet · Ort. {formatCurrency(holding.avgCost)}</Caption>
+          <Caption>{holding.quantity} adet · Ort. {formatPrice(holding.avgCost, holding.symbol)}</Caption>
         </View>
       </View>
 
       <View style={styles.holdingRight}>
         <Typography variant="body" numeric style={{ fontFamily: Fonts.semiBold, fontSize: 15 }}>
-          {formatCurrency(holding.currentPrice * holding.quantity)}
+          {formatPrice(holding.currentPrice * holding.quantity, holding.symbol)}
         </Typography>
         <Typography variant="caption" numeric style={{ color: plColor, fontFamily: Fonts.medium }}>
-          {formatCurrency(pl)} ({formatPercent(plPercent)})
+          {formatPrice(pl, holding.symbol)} ({formatPercent(plPercent)})
         </Typography>
       </View>
 
@@ -362,6 +390,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.xxl,
     paddingBottom: Spacing.lg,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  currencySelector: {
+    flexDirection: 'row',
+    backgroundColor: FinanceTheme.surface,
+    borderRadius: 16,
+    padding: 2,
+    gap: 2,
+  },
+  currencyPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  currencyPillActive: {
+    backgroundColor: FinanceTheme.primary,
+  },
+  currencyPillText: {
+    fontSize: 11,
+    fontFamily: Fonts.semiBold,
+    color: FinanceTheme.textSecondary,
+  },
+  currencyPillTextActive: {
+    color: '#FFFFFF',
   },
   headerSubtitle: {
     marginTop: 4,

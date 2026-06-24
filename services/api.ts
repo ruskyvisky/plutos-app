@@ -139,12 +139,38 @@ function adaptIndex(idx: BackendIndexData): IndexData {
   };
 }
 
+// ─── Cache Helpers ───────────────────────────────────────────
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+const cacheMap = new Map<string, CacheEntry<any>>();
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds frontend cache
+
+function getFromCache<T>(key: string): T | null {
+  const entry = cacheMap.get(key);
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL_MS) {
+    return entry.data;
+  }
+  return null;
+}
+
+function setToCache<T>(key: string, data: T): void {
+  cacheMap.set(key, { data, timestamp: Date.now() });
+}
+
 // ─── Market API ──────────────────────────────────────────────
 
 export async function fetchIndices(): Promise<IndexData[]> {
+  const cacheKey = 'indices';
+  const cached = getFromCache<IndexData[]>(cacheKey);
+  if (cached) return cached;
   try {
     const data = await apiFetch<BackendIndexData[]>('/indices/');
-    return data.map(adaptIndex);
+    const result = data.map(adaptIndex);
+    setToCache(cacheKey, result);
+    return result;
   } catch (e) {
     console.error('fetchIndices error:', e);
     return [];
@@ -152,9 +178,14 @@ export async function fetchIndices(): Promise<IndexData[]> {
 }
 
 export async function fetchTopGainers(): Promise<Stock[]> {
+  const cacheKey = 'top_gainers';
+  const cached = getFromCache<Stock[]>(cacheKey);
+  if (cached) return cached;
   try {
     const data = await apiFetch<BackendStockData[]>('/market/top-gainers');
-    return data.map(adaptStock);
+    const result = data.map(adaptStock);
+    setToCache(cacheKey, result);
+    return result;
   } catch (e) {
     console.error('fetchTopGainers error:', e);
     return [];
@@ -162,9 +193,14 @@ export async function fetchTopGainers(): Promise<Stock[]> {
 }
 
 export async function fetchTopLosers(): Promise<Stock[]> {
+  const cacheKey = 'top_losers';
+  const cached = getFromCache<Stock[]>(cacheKey);
+  if (cached) return cached;
   try {
     const data = await apiFetch<BackendStockData[]>('/market/top-losers');
-    return data.map(adaptStock);
+    const result = data.map(adaptStock);
+    setToCache(cacheKey, result);
+    return result;
   } catch (e) {
     console.error('fetchTopLosers error:', e);
     return [];
@@ -172,9 +208,14 @@ export async function fetchTopLosers(): Promise<Stock[]> {
 }
 
 export async function fetchTopVolume(): Promise<Stock[]> {
+  const cacheKey = 'high_volume';
+  const cached = getFromCache<Stock[]>(cacheKey);
+  if (cached) return cached;
   try {
     const data = await apiFetch<BackendStockData[]>('/market/high-volume');
-    return data.map(adaptStock);
+    const result = data.map(adaptStock);
+    setToCache(cacheKey, result);
+    return result;
   } catch (e) {
     console.error('fetchTopVolume error:', e);
     return [];
@@ -182,17 +223,19 @@ export async function fetchTopVolume(): Promise<Stock[]> {
 }
 
 export async function fetchAllStocks(): Promise<Stock[]> {
+  const cacheKey = 'all_stocks';
+  const cached = getFromCache<Stock[]>(cacheKey);
+  if (cached) return cached;
   try {
-    // /market/all -> { ticker, name, sector, city }[]
-    const data = await apiFetch<{ ticker: string; name?: string; sector?: string }[]>('/market/all');
-    return data.map((s) => ({
+    const data = await apiFetch<{ ticker: string; name?: string; sector?: string; price?: number; change?: number; volume?: number }[]>('/market/all');
+    const result = data.map((s) => ({
       symbol: s.ticker,
       name: s.name ?? s.ticker,
       sector: s.sector ?? '',
-      price: 0,
-      change: 0,
-      changeAmount: 0,
-      volume: 0,
+      price: s.price ?? 0,
+      change: s.change ?? 0,
+      changeAmount: ((s.price ?? 0) * (s.change ?? 0)) / 100,
+      volume: s.volume ?? 0,
       high: 0,
       low: 0,
       open: 0,
@@ -203,8 +246,74 @@ export async function fetchAllStocks(): Promise<Stock[]> {
       eps: 0,
       dividendYield: 0,
     }));
+    setToCache(cacheKey, result);
+    return result;
   } catch (e) {
     console.error('fetchAllStocks error:', e);
+    return [];
+  }
+}
+
+export async function fetchCrypto(): Promise<Stock[]> {
+  const cacheKey = 'crypto_list';
+  const cached = getFromCache<Stock[]>(cacheKey);
+  if (cached) return cached;
+  try {
+    const data = await apiFetch<{ ticker: string; name?: string; sector?: string; price?: number; change?: number; volume?: number }[]>('/market/crypto');
+    const result = data.map((s) => ({
+      symbol: s.ticker,
+      name: s.name ?? s.ticker,
+      sector: 'Kripto',
+      price: s.price ?? 0,
+      change: s.change ?? 0,
+      changeAmount: ((s.price ?? 0) * (s.change ?? 0)) / 100,
+      volume: s.volume ?? 0,
+      high: 0,
+      low: 0,
+      open: 0,
+      prevClose: 0,
+      marketCap: 0,
+      pe: 0,
+      pb: 0,
+      eps: 0,
+      dividendYield: 0,
+    }));
+    setToCache(cacheKey, result);
+    return result;
+  } catch (e) {
+    console.error('fetchCrypto error:', e);
+    return [];
+  }
+}
+
+export async function fetchCommodities(): Promise<Stock[]> {
+  const cacheKey = 'commodities_list';
+  const cached = getFromCache<Stock[]>(cacheKey);
+  if (cached) return cached;
+  try {
+    const data = await apiFetch<{ ticker: string; name?: string; sector?: string; price?: number; change?: number; volume?: number }[]>('/market/commodities');
+    const result = data.map((s) => ({
+      symbol: s.ticker,
+      name: s.name ?? s.ticker,
+      sector: 'Emtia',
+      price: s.price ?? 0,
+      change: s.change ?? 0,
+      changeAmount: ((s.price ?? 0) * (s.change ?? 0)) / 100,
+      volume: s.volume ?? 0,
+      high: 0,
+      low: 0,
+      open: 0,
+      prevClose: 0,
+      marketCap: 0,
+      pe: 0,
+      pb: 0,
+      eps: 0,
+      dividendYield: 0,
+    }));
+    setToCache(cacheKey, result);
+    return result;
+  } catch (e) {
+    console.error('fetchCommodities error:', e);
     return [];
   }
 }
@@ -212,10 +321,13 @@ export async function fetchAllStocks(): Promise<Stock[]> {
 // ─── Stock Detail API ────────────────────────────────────────
 
 export async function fetchStockDetail(symbol: string): Promise<Stock | null> {
+  const cacheKey = `detail_${symbol}`;
+  const cached = getFromCache<Stock>(cacheKey);
+  if (cached) return cached;
   try {
     const profile = await apiFetch<BackendCompanyProfile>(`/market/profile/${symbol}`);
     const m = profile.metrics;
-    return {
+    const result: Stock = {
       symbol: profile.symbol,
       name: profile.name ?? symbol,
       sector: profile.sector ?? '',
@@ -249,6 +361,8 @@ export async function fetchStockDetail(symbol: string): Promise<Stock | null> {
       lowerLimit: m?.lower_limit ?? undefined,
       logoUrl: profile.logo_url ?? undefined,
     };
+    setToCache(cacheKey, result);
+    return result;
   } catch (e) {
     console.error('fetchStockDetail error:', e);
     return null;
@@ -275,11 +389,16 @@ export async function fetchChartData(
   symbol: string,
   timeframe: '1G' | '1H' | '1A' | '1Y' = '1A'
 ): Promise<number[]> {
+  const cacheKey = `chart_${symbol}_${timeframe}`;
+  const cached = getFromCache<number[]>(cacheKey);
+  if (cached) return cached;
   try {
     const data = await apiFetch<BackendOHLCVResponse>(
       `/market/ohlcv/${symbol}?period=${timeframe}`
     );
-    return data.data.map((d) => d.close);
+    const result = data.data.map((d) => d.close);
+    setToCache(cacheKey, result);
+    return result;
   } catch (e) {
     console.error('fetchChartData error:', e);
     return [];
@@ -290,16 +409,21 @@ export async function fetchOHLCVWithChange(
   symbol: string,
   timeframe: '1G' | '1H' | '1A' | '1Y' = '1A'
 ): Promise<OHLCVWithChange> {
+  const cacheKey = `ohlcv_${symbol}_${timeframe}`;
+  const cached = getFromCache<OHLCVWithChange>(cacheKey);
+  if (cached) return cached;
   try {
     const data = await apiFetch<BackendOHLCVResponse>(
       `/market/ohlcv/${symbol}?period=${timeframe}`
     );
-    return {
+    const result = {
       candles: data.data,
       closes: data.data.map((d) => d.close),
       periodChangePercent: data.period_change_percent,
       dates: data.data.map((d) => d.date),
     };
+    setToCache(cacheKey, result);
+    return result;
   } catch (e) {
     console.error('fetchOHLCVWithChange error:', e);
     return { candles: [], closes: [], periodChangePercent: 0, dates: [] };
@@ -316,8 +440,13 @@ export async function fetchStockNews(
   symbol: string,
   limit = 10
 ): Promise<StockNewsItem[]> {
+  const cacheKey = `news_${symbol}_${limit}`;
+  const cached = getFromCache<StockNewsItem[]>(cacheKey);
+  if (cached) return cached;
   try {
-    return await apiFetch<StockNewsItem[]>(`/market/news/${symbol}?limit=${limit}`);
+    const result = await apiFetch<StockNewsItem[]>(`/market/news/${symbol}?limit=${limit}`);
+    setToCache(cacheKey, result);
+    return result;
   } catch (e) {
     console.error('fetchStockNews error:', e);
     return [];
@@ -325,7 +454,6 @@ export async function fetchStockNews(
 }
 
 export async function fetchStocksBySector(sector: string): Promise<Stock[]> {
-  // Backend'de sektör filtresi yok; tüm hisseleri çekip filtrele
   try {
     const all = await fetchAllStocks();
     return sector ? all.filter((s) => s.sector === sector) : all;
@@ -334,6 +462,7 @@ export async function fetchStocksBySector(sector: string): Promise<Stock[]> {
     return [];
   }
 }
+
 
 // ─── Portfolio API ───────────────────────────────────────────
 
@@ -434,7 +563,6 @@ interface BackendGeneralNews {
 
 export async function fetchNews(category?: string): Promise<NewsItem[]> {
   try {
-    // Genel haberler: backend'deki /portfolio/news/general endpoint'ini kullan
     const data = await apiFetch<BackendGeneralNews[]>('/portfolio/news/general?limit=40');
     const mapped: NewsItem[] = data.map((n) => ({
       id: n.id,
@@ -445,7 +573,6 @@ export async function fetchNews(category?: string): Promise<NewsItem[]> {
       symbol: n.symbol,
       category: (n.category as NewsItem['category']) ?? 'kap',
     }));
-    // Kategori filtresi
     if (category && category !== 'all') {
       return mapped.filter((n) => n.category === category);
     }

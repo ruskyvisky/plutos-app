@@ -17,7 +17,8 @@ import { FinanceTheme, Fonts, Radii, Spacing } from '@/constants/theme';
 import { getFavorites } from '@/services/favorites';
 import { fetchStockDetail } from '@/services/api';
 import type { Stock } from '@/services/api';
-import { formatCurrency, formatPercent } from '@/services/mockData';
+import { formatPercent } from '@/services/mockData';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 interface FavoriteWidgetProps {
   /** Dış kaynaklı yenileme tetikleyici — örn. focus event'ten değişen sayaç */
@@ -25,6 +26,7 @@ interface FavoriteWidgetProps {
 }
 
 export function FavoriteWidget({ refreshTrigger }: FavoriteWidgetProps) {
+  const { formatPrice } = useCurrency();
   const router = useRouter();
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,7 +102,7 @@ export function FavoriteWidget({ refreshTrigger }: FavoriteWidgetProps) {
               </View>
             </View>
             <Typography variant="bodySmall" numeric style={styles.chipPrice}>
-              {formatCurrency(stock.price)}
+              {formatPrice(stock.price, stock.symbol)}
             </Typography>
           </TouchableOpacity>
         );

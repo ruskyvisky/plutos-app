@@ -40,7 +40,9 @@ import {
   fetchStockNews,
 } from '@/services/api';
 import { isFavorite, toggleFavorite } from '@/services/favorites';
-import { formatCurrency, formatLargeNumber, formatPercent } from '@/services/mockData';
+import { formatLargeNumber, formatPercent } from '@/services/mockData';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { getLists, addToList, removeFromList, type StockList } from '@/services/listsService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const H_PADDING = 20;
@@ -61,11 +63,14 @@ function CandlestickChart({
   candles,
   chartColor,
   periodChangePercent,
+  symbol,
 }: {
   candles: CandleData[];
   chartColor: string;
   periodChangePercent: number;
+  symbol: string;
 }) {
+  const { formatPrice } = useCurrency();
   const [tooltipIdx, setTooltipIdx] = useState<number | null>(null);
 
   const innerW = CHART_W - CHART_PT.left - CHART_PT.right;
@@ -177,7 +182,7 @@ function CandlestickChart({
                 fontSize="8" fill={FinanceTheme.textMuted}
                 fontFamily="Inter_400Regular"
               >
-                {formatCurrency(price)}
+                {formatPrice(price, symbol)}
               </SvgText>
             </React.Fragment>
           );
@@ -239,19 +244,19 @@ function CandlestickChart({
           <Caption style={chartStyles.tooltipDate}>{formatDate(tooltipCandle.date)}</Caption>
           <View style={chartStyles.tooltipRow}>
             <Caption style={chartStyles.tooltipKey}>A</Caption>
-            <Caption style={chartStyles.tooltipVal}>{formatCurrency(tooltipCandle.open)}</Caption>
+            <Caption style={chartStyles.tooltipVal}>{formatPrice(tooltipCandle.open, symbol)}</Caption>
           </View>
           <View style={chartStyles.tooltipRow}>
             <Caption style={[chartStyles.tooltipKey, { color: FinanceTheme.profit }]}>Y</Caption>
-            <Caption style={chartStyles.tooltipVal}>{formatCurrency(tooltipCandle.high)}</Caption>
+            <Caption style={chartStyles.tooltipVal}>{formatPrice(tooltipCandle.high, symbol)}</Caption>
           </View>
           <View style={chartStyles.tooltipRow}>
             <Caption style={[chartStyles.tooltipKey, { color: FinanceTheme.loss }]}>D</Caption>
-            <Caption style={chartStyles.tooltipVal}>{formatCurrency(tooltipCandle.low)}</Caption>
+            <Caption style={chartStyles.tooltipVal}>{formatPrice(tooltipCandle.low, symbol)}</Caption>
           </View>
           <View style={chartStyles.tooltipRow}>
             <Caption style={chartStyles.tooltipKey}>K</Caption>
-            <Caption style={[chartStyles.tooltipVal, { fontFamily: Fonts.semiBold }]}>{formatCurrency(tooltipCandle.close)}</Caption>
+            <Caption style={[chartStyles.tooltipVal, { fontFamily: Fonts.semiBold }]}>{formatPrice(tooltipCandle.close, symbol)}</Caption>
           </View>
         </View>
       )}
@@ -295,6 +300,7 @@ const chartStyles = StyleSheet.create({
 export default function StockDetailScreen() {
   const { symbol } = useLocalSearchParams<{ symbol: string }>();
   const router = useRouter();
+  const { formatPrice, convertPrice, currency } = useCurrency();
 
   const [stock, setStock] = useState<Stock | null>(null);
   const [ohlcv, setOhlcv] = useState<OHLCVWithChange>({
@@ -305,6 +311,31 @@ export default function StockDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [chartLoading, setChartLoading] = useState(false);
   const [favorite, setFavorite] = useState(false);
+
+  // Lists modal states
+  const [showListModal, setShowListModal] = useState(false);
+  const [userLists, setUserLists] = useState<StockList[]>([]);
+
+  const loadUserLists = async () => {
+    const all = await getLists();
+    setUserLists(all.filter(l => !l.isSystem));
+  };
+
+  useEffect(() => {
+    if (showListModal) {
+      loadUserLists();
+    }
+  }, [showListModal]);
+
+  const handleToggleList = async (listId: string, isIn: boolean) => {
+    if (!symbol) return;
+    if (isIn) {
+      await removeFromList(listId, symbol as string);
+    } else {
+      await addToList(listId, symbol as string);
+    }
+    loadUserLists();
+  };
 
   // Info modal
   const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
@@ -410,34 +441,40 @@ export default function StockDetailScreen() {
     hasValue: boolean;
   };
 
+  const getCurrencySymbol = () => {
+    if (currency === 'TRY') return ' ₺';
+    if (currency === 'USD') return ' $';
+    return ' €';
+  };
+
   const allMetrics: MetricDef[] = [
     {
       label: 'Açılış',
-      value: stock.open > 0 ? formatCurrency(stock.open) : '—',
+      value: stock.open > 0 ? formatPrice(stock.open, symbol as string) : '—',
       hasValue: stock.open > 0,
       description: 'Günün açılış fiyatı. Piyasanın o gün işleme başladığı ilk fiyat seviyesidir.',
     },
     {
       label: 'Tavan',
-      value: stock.upperLimit != null ? formatCurrency(stock.upperLimit) : '—',
+      value: stock.upperLimit != null ? formatPrice(stock.upperLimit, symbol as string) : '—',
       hasValue: stock.upperLimit != null,
       description: 'Günlük tavan fiyat. BIST\'te hisse fiyatları bir günde önceki kapanışa göre en fazla %10 yükselebilir. Bu, teorik üst limitdir.',
     },
     {
       label: 'Taban',
-      value: stock.lowerLimit != null ? formatCurrency(stock.lowerLimit) : '—',
+      value: stock.lowerLimit != null ? formatPrice(stock.lowerLimit, symbol as string) : '—',
       hasValue: stock.lowerLimit != null,
       description: 'Günlük taban fiyat. BIST\'te hisse fiyatları bir günde önceki kapanışa göre en fazla %10 düşebilir. Bu, teorik alt limitdir.',
     },
     {
       label: '52H Yük.',
-      value: stock.fiftyTwoWeekHigh != null ? formatCurrency(stock.fiftyTwoWeekHigh) : '—',
+      value: stock.fiftyTwoWeekHigh != null ? formatPrice(stock.fiftyTwoWeekHigh, symbol as string) : '—',
       hasValue: stock.fiftyTwoWeekHigh != null,
       description: '52 Haftalık En Yüksek Fiyat. Son 1 yılda ulaşılan zirve. Mevcut fiyatla kıyaslanarak hissenin yıllık performansı değerlendirilebilir.',
     },
     {
       label: '52H Düş.',
-      value: stock.fiftyTwoWeekLow != null ? formatCurrency(stock.fiftyTwoWeekLow) : '—',
+      value: stock.fiftyTwoWeekLow != null ? formatPrice(stock.fiftyTwoWeekLow, symbol as string) : '—',
       hasValue: stock.fiftyTwoWeekLow != null,
       description: '52 Haftalık En Düşük Fiyat. Son 1 yılda görülen dip. Teknik analizde destek bölgesi olarak kullanılır.',
     },
@@ -455,7 +492,7 @@ export default function StockDetailScreen() {
     },
     {
       label: 'HBK',
-      value: stock.eps > 0 ? '₺' + stock.eps.toFixed(2) : '—',
+      value: stock.eps > 0 ? formatPrice(stock.eps, symbol as string) : '—',
       hasValue: stock.eps > 0,
       description: 'Hisse Başına Kâr. Şirketin net kârının toplam hisse adedine bölümüdür.',
     },
@@ -479,7 +516,7 @@ export default function StockDetailScreen() {
     },
     {
       label: 'Piyasa D.',
-      value: stock.marketCap > 0 ? formatLargeNumber(stock.marketCap) + ' ₺' : '—',
+      value: stock.marketCap > 0 ? formatLargeNumber(convertPrice(stock.marketCap, symbol as string)) + getCurrencySymbol() : '—',
       hasValue: stock.marketCap > 0,
       description: 'Piyasa Değeri. Şirketin borsadaki toplam değeridir. Hisse fiyatı × Dolaşımdaki hisse sayısı.',
     },
@@ -497,13 +534,13 @@ export default function StockDetailScreen() {
     },
     {
       label: '50G Ort.',
-      value: stock.fiftyDayAvg != null ? formatCurrency(stock.fiftyDayAvg) : '—',
+      value: stock.fiftyDayAvg != null ? formatPrice(stock.fiftyDayAvg, symbol as string) : '—',
       hasValue: stock.fiftyDayAvg != null,
       description: '50 Günlük Hareketli Ortalama. Kısa-orta vadeli trend yönünü belirlemek için kullanılır.',
     },
     {
       label: '200G Ort.',
-      value: stock.twoHundredDayAvg != null ? formatCurrency(stock.twoHundredDayAvg) : '—',
+      value: stock.twoHundredDayAvg != null ? formatPrice(stock.twoHundredDayAvg, symbol as string) : '—',
       hasValue: stock.twoHundredDayAvg != null,
       description: '200 Günlük Hareketli Ortalama. Uzun vadeli trend göstergesi. Bu ortalamanın üzeri "boğa", altı "ayı" eğilimi.',
     },
@@ -523,19 +560,24 @@ export default function StockDetailScreen() {
           <H3>{stock.symbol}</H3>
           <Caption numberOfLines={1} style={styles.headerSub}>{stock.name}</Caption>
         </View>
-        <TouchableOpacity style={styles.favoriteButton} onPress={handleFavorite}>
-          <Ionicons
-            name={favorite ? 'star' : 'star-outline'}
-            size={22}
-            color={favorite ? '#F59E0B' : FinanceTheme.textMuted}
-          />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.listIconButton} onPress={() => setShowListModal(true)}>
+            <Ionicons name="list-outline" size={22} color={FinanceTheme.text} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.favoriteButton} onPress={handleFavorite}>
+            <Ionicons
+              name={favorite ? 'star' : 'star-outline'}
+              size={22}
+              color={favorite ? '#F59E0B' : FinanceTheme.textMuted}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* ─── Price ─── */}
         <View style={styles.priceSection}>
-          <H1 numeric style={styles.priceText}>{formatCurrency(stock.price)}</H1>
+          <H1 numeric style={styles.priceText}>{formatPrice(stock.price, symbol as string)}</H1>
           <View style={[styles.changeBadge, { backgroundColor: changeBg }]}>
             <Ionicons
               name={stock.change >= 0 ? 'caret-up' : 'caret-down'}
@@ -550,7 +592,7 @@ export default function StockDetailScreen() {
                 { color: stock.change >= 0 ? FinanceTheme.profit : FinanceTheme.loss },
               ]}
             >
-              {formatCurrency(Math.abs(stock.changeAmount))} ({formatPercent(stock.change)})
+              {formatPrice(Math.abs(stock.changeAmount), symbol as string)} ({formatPercent(stock.change)})
             </Typography>
           </View>
         </View>
@@ -604,6 +646,7 @@ export default function StockDetailScreen() {
               candles={ohlcv.candles}
               chartColor={changeColor}
               periodChangePercent={ohlcv.periodChangePercent}
+              symbol={symbol as string}
             />
           )}
         </View>
@@ -611,10 +654,10 @@ export default function StockDetailScreen() {
         {/* ─── Gün İçi Bilgileri ─── */}
         <Card variant="default" padding="md" style={styles.dayCard}>
           <View style={styles.dayRow}>
-            <DayItem label="Açılış" value={formatCurrency(stock.open)} />
-            <DayItem label="Yüksek" value={formatCurrency(stock.high)} color={FinanceTheme.profit} />
-            <DayItem label="Düşük" value={formatCurrency(stock.low)} color={FinanceTheme.loss} />
-            <DayItem label="Ön. Kapanış" value={formatCurrency(stock.prevClose)} />
+            <DayItem label="Açılış" value={formatPrice(stock.open, symbol as string)} />
+            <DayItem label="Yüksek" value={formatPrice(stock.high, symbol as string)} color={FinanceTheme.profit} />
+            <DayItem label="Düşük" value={formatPrice(stock.low, symbol as string)} color={FinanceTheme.loss} />
+            <DayItem label="Ön. Kapanış" value={formatPrice(stock.prevClose, symbol as string)} />
           </View>
         </Card>
 
@@ -722,6 +765,60 @@ export default function StockDetailScreen() {
           </TouchableWithoutFeedback>
         </Modal>
       )}
+
+      {/* ─── List Selection Modal ─── */}
+      <Modal
+        visible={showListModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowListModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowListModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.listModalCard}>
+            <View style={styles.listModalHeader}>
+              <H3 style={styles.listModalTitle}>Listelerime Ekle / Çıkar</H3>
+              <TouchableOpacity onPress={() => setShowListModal(false)} style={{ padding: 4 }}>
+                <Ionicons name="close" size={22} color={FinanceTheme.text} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.modalDivider} />
+            
+            {userLists.length === 0 ? (
+              <Caption style={styles.emptyListText}>
+                Henüz özel listeniz yok. Ana sayfadan bir liste oluşturabilirsiniz.
+              </Caption>
+            ) : (
+              <ScrollView style={styles.listModalScroll}>
+                {userLists.map((list) => {
+                  const hasSymbol = list.symbols.includes((symbol as string).toUpperCase());
+                  return (
+                    <TouchableOpacity
+                      key={list.id}
+                      style={styles.listModalItem}
+                      onPress={() => handleToggleList(list.id, hasSymbol)}
+                      activeOpacity={0.7}
+                    >
+                      <Body style={styles.listModalItemName}>
+                        {list.icon} {list.name}
+                      </Body>
+                      <Ionicons
+                        name={hasSymbol ? 'checkbox' : 'square-outline'}
+                        size={22}
+                        color={hasSymbol ? FinanceTheme.primary : FinanceTheme.textMuted}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -957,4 +1054,51 @@ const styles = StyleSheet.create({
   modalTitle: { fontFamily: Fonts.semiBold, color: FinanceTheme.text, fontSize: 16, flex: 1 },
   modalDivider: { height: 1, backgroundColor: FinanceTheme.divider, marginVertical: 14 },
   modalDesc: { color: FinanceTheme.textSecondary, fontSize: 14, lineHeight: 22 },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  listIconButton: {
+    padding: 4,
+  },
+  listModalCard: {
+    width: '90%',
+    maxHeight: '60%',
+    backgroundColor: FinanceTheme.card,
+    borderRadius: Radii.xl,
+    borderWidth: 1,
+    borderColor: FinanceTheme.cardBorder,
+    padding: Spacing.lg,
+  },
+  listModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  listModalTitle: {
+    fontFamily: Fonts.bold,
+    fontSize: 18,
+    color: FinanceTheme.text,
+  },
+  listModalScroll: {
+    marginTop: Spacing.sm,
+  },
+  listModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: FinanceTheme.divider,
+  },
+  listModalItemName: {
+    fontSize: 15,
+    fontFamily: Fonts.medium,
+  },
+  emptyListText: {
+    textAlign: 'center',
+    color: FinanceTheme.textMuted,
+    paddingVertical: 24,
+  },
 });

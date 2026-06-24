@@ -15,6 +15,7 @@ import 'react-native-reanimated';
 
 import { ChatFAB } from '@/components/ui/ChatFAB';
 import { FinanceTheme } from '@/constants/theme';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -56,42 +57,44 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={PlutosDark}>
-      <View style={{ flex: 1 }}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: 'slide_from_right',
-            animationDuration: 250,
-            contentStyle: { backgroundColor: FinanceTheme.background },
-          }}
-        >
-          <Stack.Screen name="login" />
-          <Stack.Screen name="register" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="stock/[symbol]"
-            options={{
+    <CurrencyProvider>
+      <ThemeProvider value={PlutosDark}>
+        <View style={{ flex: 1 }}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
               animation: 'slide_from_right',
+              animationDuration: 250,
+              contentStyle: { backgroundColor: FinanceTheme.background },
             }}
-          />
-          <Stack.Screen
-            name="chat"
-            options={{
-              animation: 'slide_from_bottom',
-            }}
-          />
-          <Stack.Screen
-            name="list/[id]"
-            options={{
-              animation: 'slide_from_right',
-            }}
-          />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        </Stack>
-        <ChatFAB />
-      </View>
-      <StatusBar style="light" />
-    </ThemeProvider>
+          >
+            <Stack.Screen name="login" />
+            <Stack.Screen name="register" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="stock/[symbol]"
+              options={{
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="chat"
+              options={{
+                animation: 'slide_from_bottom',
+              }}
+            />
+            <Stack.Screen
+              name="list/[id]"
+              options={{
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          </Stack>
+          <ChatFAB />
+        </View>
+        <StatusBar style="light" />
+      </ThemeProvider>
+    </CurrencyProvider>
   );
 }

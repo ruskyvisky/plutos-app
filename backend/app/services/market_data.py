@@ -52,14 +52,23 @@ class MarketDataService:
             for key, meta in self.EXTRA_SYMBOLS.items():
                 try:
                     yf_ticker = yf.Ticker(meta["yf"])
-                    info = yf_ticker.fast_info
-                    price = getattr(info, "last_price", None) or getattr(info, "regularMarketPrice", 0.0)
-                    prev  = getattr(info, "previous_close", None) or price
+                    hist = yf_ticker.history(period="2d")
+                    if not hist.empty:
+                        price = float(hist['Close'].iloc[-1])
+                        prev = float(hist['Close'].iloc[-2]) if len(hist) >= 2 else price
+                    else:
+                        price = 0.0
+                        prev = 0.0
+                        
+                    if key == "ALTIN":
+                        price = price / 31.10347
+                        prev = prev / 31.10347
+                        
                     change_pct = ((price - prev) / prev * 100) if prev else 0.0
                     results.append({
                         "index_name": meta["label"],
-                        "value": float(price or 0.0),
-                        "change_percentage": float(change_pct or 0.0),
+                        "value": float(price),
+                        "change_percentage": float(change_pct),
                     })
                 except Exception as inner_e:
                     logger.error(f"Error fetching extra symbol {key}: {inner_e}")
@@ -117,10 +126,49 @@ class MarketDataService:
         Tüm BIST hisselerini döner.
         """
         try:
+            from app.services.seeder import market_cache
+            if market_cache.data.get("all_stocks"):
+                return market_cache.data["all_stocks"]
+                
             df = bp.companies()
             if df.empty:
                 return []
-            return df.to_dict(orient="records")
+            
+            # Simple fallback classification if cache is not populated yet
+            results = []
+            for _, row in df.iterrows():
+                ticker = row['ticker']
+                name = row.get('name') or ticker
+                
+                # Heuristic classification
+                symbol_upper = ticker.upper()
+                name_upper = name.upper()
+                
+                banking_syms = ["AKBNK", "ALBRK", "GARAN", "HALKB", "ISCTR", "KLNMA", "QNB", "TSKB", "VAKBN", "YKBNK", "ICBCT"]
+                energy_syms = ["ENJS", "ODAS", "AKSEN", "ZOREN", "AYDEM", "GWIND", "CONSE", "HUNER", "ALFAS", "YEOTK", "SMRTG", "ASTOR", "EUPWR", "CATES", "ENTRA", "BRSAN", "CWENE"]
+                trans_syms = ["THYAO", "PGSUS", "TAVHL", "DOCO", "CLEBI", "RYGYO", "GSDDE"]
+                retail_syms = ["BIMAS", "SOKM", "MGROS", "CRFSA", "TKNSA", "MAVI", "VAKKO", "DOAS"]
+                
+                if any(s in symbol_upper for s in banking_syms) or "BANK" in name_upper or "KATILIM" in name_upper:
+                    sector = "Bankacılık"
+                elif any(s in symbol_upper for s in energy_syms) or "ENERJ" in name_upper or "ELEKTR" in name_upper or "SOLAR" in name_upper or "RUZGAR" in name_upper:
+                    sector = "Enerji"
+                elif any(s in symbol_upper for s in trans_syms) or "HAVA" in name_upper or "ULASTIRMA" in name_upper or "TASIMACILIK" in name_upper or "LOJISTIK" in name_upper or "DENIZ" in name_upper:
+                    sector = "Ulaştırma"
+                elif any(s in symbol_upper for s in retail_syms) or "MAGAZA" in name_upper or "MARKET" in name_upper or "PERAKENDE" in name_upper or "TEKSTIL" in name_upper or "GIYIM" in name_upper:
+                    sector = "Perakende"
+                else:
+                    sector = "Sanayi"
+                    
+                results.append({
+                    "ticker": ticker,
+                    "name": name,
+                    "sector": sector,
+                    "price": 0.0,
+                    "change": 0.0,
+                    "volume": 0.0
+                })
+            return results
         except Exception as e:
             logger.error(f"Error fetching all stocks: {e}")
             return []
@@ -160,9 +208,14 @@ class MarketDataService:
                     'Volume': 'sum'
                 }).dropna()
 
+            is_precious_metal = symbol in ("GC=F", "SI=F")
+
             # Calculate period percentage change
             first_price = df['Open'].iloc[0]
             last_price = df['Close'].iloc[-1]
+            if is_precious_metal:
+                first_price /= 31.10347
+                last_price /= 31.10347
             period_change = ((last_price - first_price) / first_price * 100) if first_price != 0 else 0.0
 
             df = df.reset_index()
@@ -170,12 +223,24 @@ class MarketDataService:
             for _, row in df.iterrows():
                 date_val = row.get('Date') or row.get('index')
                 date_str = date_val.isoformat() if hasattr(date_val, 'isoformat') else str(date_val)
+                
+                open_p = float(row.get('Open', row.get('open', 0.0)))
+                high_p = float(row.get('High', row.get('high', 0.0)))
+                low_p = float(row.get('Low', row.get('low', 0.0)))
+                close_p = float(row.get('Close', row.get('close', 0.0)))
+                
+                if is_precious_metal:
+                    open_p /= 31.10347
+                    high_p /= 31.10347
+                    low_p /= 31.10347
+                    close_p /= 31.10347
+
                 results.append({
                     "date": date_str,
-                    "open": float(row.get('Open', row.get('open', 0.0))),
-                    "high": float(row.get('High', row.get('high', 0.0))),
-                    "low": float(row.get('Low', row.get('low', 0.0))),
-                    "close": float(row.get('Close', row.get('close', 0.0))),
+                    "open": open_p,
+                    "high": high_p,
+                    "low": low_p,
+                    "close": close_p,
                     "volume": float(row.get('Volume', row.get('volume', 0.0)))
                 })
             
@@ -264,10 +329,50 @@ class MarketDataService:
             ticker = bp.Ticker(symbol)
             info = ticker.info
             
+            is_precious_metal = symbol in ("GC=F", "SI=F")
+            divisor = 31.10347 if is_precious_metal else 1.0
+
             # Detailed metrics from info
-            price_val = info.get("regularMarketPrice") or info.get("last") or 0.0
+            price_val = (info.get("regularMarketPrice") or info.get("last") or 0.0) / divisor
             change_pct = info.get("regularMarketChangePercent") or info.get("change_percent") or 0.0
-            change_amt = info.get("regularMarketChange") or (price_val * change_pct / 100) or 0.0
+            change_amt = (info.get("regularMarketChange") or (price_val * change_pct / 100) or 0.0)
+            if not info.get("regularMarketChange") and not is_precious_metal:
+                change_amt = (price_val * change_pct / 100)
+            elif is_precious_metal:
+                change_amt = change_amt / divisor
+
+            fifty_two_week_high = info.get("fiftyTwoWeekHigh")
+            if fifty_two_week_high is not None:
+                fifty_two_week_high /= divisor
+
+            fifty_two_week_low = info.get("fiftyTwoWeekLow")
+            if fifty_two_week_low is not None:
+                fifty_two_week_low /= divisor
+
+            fifty_day_average = info.get("fiftyDayAverage")
+            if fifty_day_average is not None:
+                fifty_day_average /= divisor
+
+            two_hundred_day_average = info.get("twoHundredDayAverage")
+            if two_hundred_day_average is not None:
+                two_hundred_day_average /= divisor
+
+            open_price = info.get("regularMarketOpen") or info.get("open")
+            if open_price is not None:
+                open_price /= divisor
+
+            day_high = info.get("regularMarketDayHigh") or info.get("dayHigh")
+            if day_high is not None:
+                day_high /= divisor
+
+            day_low = info.get("regularMarketDayLow") or info.get("dayLow")
+            if day_low is not None:
+                day_low /= divisor
+
+            prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            if prev_close is not None:
+                prev_close /= divisor
+
             metrics = {
                 "symbol": symbol,
                 "price": price_val,
@@ -282,17 +387,17 @@ class MarketDataService:
                 "float_shares": info.get("floatShares"),
                 "foreign_ratio": info.get("foreignRatio"),
                 "dividend_yield": info.get("dividendYield"),
-                "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
-                "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
-                "fifty_day_average": info.get("fiftyDayAverage"),
-                "two_hundred_day_average": info.get("twoHundredDayAverage"),
+                "fifty_two_week_high": fifty_two_week_high,
+                "fifty_two_week_low": fifty_two_week_low,
+                "fifty_day_average": fifty_day_average,
+                "two_hundred_day_average": two_hundred_day_average,
                 "beta": info.get("beta"),
                 # Daily OHLC
                 "volume": info.get("regularMarketVolume") or info.get("volume"),
-                "open_price": info.get("regularMarketOpen") or info.get("open"),
-                "day_high": info.get("regularMarketDayHigh") or info.get("dayHigh"),
-                "day_low": info.get("regularMarketDayLow") or info.get("dayLow"),
-                "prev_close": info.get("regularMarketPreviousClose") or info.get("previousClose"),
+                "open_price": open_price,
+                "day_high": day_high,
+                "day_low": day_low,
+                "prev_close": prev_close,
             }
             # Tavan / Taban hesapla (±%10 BIST günlük fiyat limiti)
             prev = metrics.get("prev_close") or metrics.get("price") or 0
